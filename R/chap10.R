@@ -1,0 +1,344 @@
+
+options(scipen=999)
+
+# TODO: remove once package is available on CRAN
+library(devtools)
+install_github("gedeck/mlba/mlba", force=TRUE)
+# library(mlba)
+
+# Logistic Regression
+## The Logistic Regression Model
+
+  library(ggplot2)
+  library(gridExtra)
+
+  p <- seq(0.005, 0.995, 0.01)
+  df <- data.frame(
+    p = p,
+    odds = p / (1 - p),
+    logit = log(p / (1 - p))
+  )
+
+  g1 <- ggplot(df, aes(x=p, y=odds)) +
+    geom_line() + coord_cartesian(xlim=c(0, 1), ylim=c(0, 100)) +
+    labs(x='Probability of success', y='Odds', title='(a)') +
+    geom_hline(yintercept = 0) +
+    theme_bw() +
+    theme(axis.line = element_line(colour = "black"),
+          axis.line.x = element_blank(),
+          panel.border = element_blank())
+  g2 <- ggplot(df, aes(x=p, y=logit)) +
+    geom_line() + coord_cartesian(xlim=c(0, 1), ylim=c(-4, 4)) +
+    labs(x='Probability of success', y='Logit', title='(b)' ) +
+    geom_hline(yintercept = 0) +
+    theme_bw() +
+    theme(axis.line = element_line(colour = "black"),
+          axis.line.x = element_blank(),
+          panel.border = element_blank())
+
+  grid.arrange(g1, g2, ncol=2)
+
+  g1 <- ggplotGrob(g1)
+  g2 <- ggplotGrob(g2)
+  maxWidth = grid::unit.pmax(g1$widths[2:5], g2$widths[2:5])
+  g1$widths[2:5] <- as.list(maxWidth)
+  g2$widths[2:5] <- as.list(maxWidth)
+  g <- arrangeGrob(g1, g2)
+  ggsave(file=file.path("..", "figures", "chapter_10", "odds_logit.pdf"), g,
+         width=6, height=6)
+
+## Example: Acceptance of Personal Loan
+### Model with a Single Predictor
+
+bank.df <- mlba::UniversalBank
+g <- ggplot(bank.df, aes(x=Income, y=Personal.Loan)) +
+  geom_jitter(width=0, height=0.01, alpha=0.1) +
+  geom_function(fun=function(x){ return (1 / (1 + exp(6.04892 - 0.036*x)))}) +
+  xlim(0, 250) +
+  labs(x='Income (in $000s)') +
+  theme_bw()
+g
+ggsave(file=file.path("..", "figures", "chapter_10", "fitted_logistic.pdf"), g,
+         width=5, height=3)
+
+
+### Estimating the Logistic Model from Data: Computing Parameter Estimates
+#### Estimated Model
+
+library(caret)
+library(tidyverse)
+
+# load and preprocess data
+bank.df <- mlba::UniversalBank %>%
+  select(-c(ID, ZIP.Code)) %>% # Drop ID and zip code columns.
+  mutate(
+    Education = factor(Education, levels=c(1:3),
+                       labels=c("Undergrad", "Graduate", "Advanced/Professional")),
+    Personal.Loan = factor(Personal.Loan, levels=c(0, 1),
+                           labels=c("No", "Yes"))
+  )
+
+# partition data
+set.seed(2)
+idx <- caret::createDataPartition(bank.df$Personal.Loan, p=0.6, list=FALSE)
+train.df <- bank.df[idx, ]
+holdout.df <- bank.df[-idx, ]
+
+# build model
+trControl <- caret::trainControl(method="cv", number=5, allowParallel=TRUE)
+logit.reg <- caret::train(Personal.Loan ~ ., data=train.df, trControl=trControl,
+                      # fit logistic regression with a generalized linear model
+                      method="glm", family="binomial")
+logit.reg
+summary(logit.reg$finalModel)
+
+## Evaluating Classification Performance
+### Interpreting Results in Terms of Odds (for a Profiling Goal)
+
+# use predict() with type = "response" to compute predicted probabilities.
+logit.reg.pred <- predict(logit.reg, holdout.df[, -8], type = "prob")
+
+# display four different cases
+interestingCases = c(1, 12, 32, 1333)
+data.frame(
+  actual = holdout.df$Personal.Loan[interestingCases],
+  p0 = logit.reg.pred[interestingCases, 1],
+  p1 = logit.reg.pred[interestingCases, 2],
+  predicted = ifelse(logit.reg.pred[interestingCases, 2] > 0.5, 1, 0)
+)
+
+
+library(gains)
+actual <- ifelse(holdout.df$Personal.Loan == "Yes", 1, 0)
+gain <- gains(actual, logit.reg.pred[,2], groups=length(actual) - 2)
+
+# plot gains chart
+nactual <-sum(actual)
+g1 <- ggplot() +
+  geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual)) +
+  geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
+  labs(x="# cases", y="Cumulative")
+
+# plot decile-wise lift chart
+gain10 <- gains(actual, logit.reg.pred[,2], groups=10)
+g2 <- ggplot(mapping=aes(x=gain10$depth, y=gain10$lift / 100)) +
+  geom_col(fill="steelblue") +
+  geom_text(aes(label=round(gain10$lift / 100, 1)), vjust=-0.2, size=3) +
+  ylim(0, 8) + labs(x="Percentile", y="Lift")
+grid.arrange(g1, g2, ncol=2)
+
+
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2, widths=c(0.45, 0.55))
+ggsave(file=file.path("..", "figures", "chapter_10", "gains-lift.pdf"), g,
+       width=6, height=2.5)
+
+## Logistic Regression for Multi-Class Classification
+#### Ordinal Classes
+
+# simulate simple data
+Y = rep(c("a", "b", "c"), 100)
+x = rep(c(1, 2, 3), 100) +  rnorm(300, 0, 1)
+
+# ordinal logistic regression
+Y = factor(Y, ordered = T)
+MASS::polr(Y ~ x)
+
+# nominal logistic regression
+Y = factor(Y, ordered = F)
+nnet::multinom(Y ~ x)
+
+## Example of Complete Analysis: Predicting Delayed Flights
+
+# code for generating top-left bar chart
+# for other plots replace the aggregating variable in the group_by and ggplot commands
+# adjust the x-label
+library(tidyverse)
+
+delays.df <- mlba::FlightDelays
+averageDelay <- delays.df %>%
+  group_by(DAY_WEEK) %>%
+  summarize(mean=mean(Flight.Status == 'delayed'))
+
+ggplot(averageDelay, aes(x=DAY_WEEK, y=mean)) +
+  geom_col(fill='steelblue') +
+  labs(x='Day of Week', y='Average Delay')
+
+
+
+averageDelayChart <- function(data, groupBy, xlabel) {
+  averageDelay <- data %>%
+    mutate(groupBy = factor(groupBy)) %>%
+    group_by_at(groupBy) %>%
+    summarize(mean=mean(Flight.Status == 'delayed'))
+
+  return (ggplot(averageDelay, aes_string(x=groupBy, y='mean')) +
+    geom_col(fill='steelblue') +
+    theme_bw() +
+    labs(x=xlabel, y='Average Delay'))
+}
+binned.df <- data.frame(
+  Flight.Status = delays.df$Flight.Status,
+  CRS_DEP_TIME = round(delays.df$CRS_DEP_TIME / 100)
+)
+# need to change Weather to factor
+delays.df$Weather <- factor(delays.df$Weather)
+g1 <- averageDelayChart(delays.df, 'DAY_WEEK', 'Day of week')
+g2 <- averageDelayChart(delays.df, 'DEST', 'Destination')
+g3 <- averageDelayChart(binned.df, 'CRS_DEP_TIME', 'Departure time (planned)')
+g4 <- averageDelayChart(delays.df, 'CARRIER', 'Carrier')
+g5 <- averageDelayChart(delays.df, 'ORIGIN', 'Origin')
+g6 <- averageDelayChart(delays.df, 'Weather', 'Weather')
+
+grid.arrange(g1, g2, g3, g4, g5, g6, ncol=2, nrow=3)
+g <- arrangeGrob(g1, g2, g3, g4, g5, g6, ncol=2, nrow=3)
+ggsave(file=file.path("..", "figures", "chapter_10", "LRFlightDelaysBarCharts_new.pdf"),
+       g, width=6, height=6, units="in")
+
+
+# code for generating top-right bar chart
+# for other plots, replace aggregating variable by setting argument by =  in
+# aggregate().
+# in function barplot(), set the x-label (argument xlab =) and y-label
+# (argument names.arg =)
+# according to the variable of choice.
+delays.df = mlba::FlightDelays
+barplot(aggregate(delays.df$Flight.Status == "delayed", by = list(delays.df$DAY_WEEK),
+                  mean, rm.na = T)[,2], xlab = "Day of Week", ylab = "Average Delay",
+                  names.arg = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
+
+
+library(reshape)
+# create matrix for plot
+agg <- delays.df %>%
+  mutate(isDelay=1 * (delays.df$Flight.Status == "delayed")) %>%
+  group_by(DAY_WEEK, CARRIER, ORIGIN) %>%
+  summarize(mean=mean(isDelay))
+
+# plot with ggplot
+# use facet_grid() with arguments scales = "free" and space = "free" to skip
+# missing values.
+ggplot(agg, aes(y=CARRIER, x=DAY_WEEK, fill=mean)) +
+  geom_tile() +
+  facet_grid(ORIGIN ~ ., scales="free", space="free") +
+  scale_fill_gradient(low="white", high="steelblue")
+
+
+  ggsave(file=file.path("..", "figures", "chapter_10", "LRFlightDelaysHeatmap.pdf"),
+         last_plot() + theme_bw(), width=6, height=4, units="in")
+
+### Model-Fitting and Estimation
+
+df <- mlba::FlightDelays %>%
+  mutate(
+    # transform variables and create bins
+    DAY_WEEK = factor(DAY_WEEK, levels=c(1:7),
+                      labels=c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")),
+    CRS_DEP_TIME = factor(round(CRS_DEP_TIME / 100)),
+    Flight.Status = factor(Flight.Status, levels=c("ontime", "delayed")),
+    # convert other variables to factors
+    across(c(ORIGIN,DEST, CARRIER, DAY_WEEK), factor)
+  ) %>%
+  # select predictors and outcome variables
+  select(DAY_WEEK, CRS_DEP_TIME, ORIGIN, DEST, CARRIER, Weather, Flight.Status)
+
+# create training and holdout sets
+set.seed(1)
+idx <- caret::createDataPartition(df$Flight.Status, p=0.6, list=FALSE)
+train.df <- df[idx, ]
+holdout.df <- df[-idx, ]
+
+# run logistic model, and show coefficients and odds
+trControl <- caret::trainControl(method="cv", number=5, allowParallel=TRUE)
+model <- caret::train(Flight.Status ~ ., data=train.df,
+                      method="glm",  family="binomial", trControl=trControl)
+round(data.frame(summary(model$finalModel)$coefficients,
+                 odds = exp(coef(model$finalModel))), 5)
+
+### Model Performance
+
+library(gains)
+actual <- ifelse(holdout.df$Flight.Status == "delayed", 1, 0)
+pred <- predict(model, holdout.df, type="prob")[, 2]
+gain <- gains(actual, pred, groups=length(pred))
+
+nactual <-sum(actual)
+ggplot() +
+  geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual)) +
+  geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
+  labs(x="# cases", y="Cumulative")
+
+
+confusionMatrix(predict(model, holdout.df), holdout.df$Flight.Status)
+
+
+ggsave(file=file.path("..", "figures", "chapter_10", "LRperformance_Flights.pdf"),
+       last_plot() + theme_bw(),
+       width=3, height=3)
+
+### Variable Selection
+
+# fewer predictors
+reduced.df <- mlba::FlightDelays %>%
+  mutate(
+    HOUR = round(CRS_DEP_TIME / 100),
+    SUN_MON = DAY_WEEK %in% c(1, 7),
+    CARRIER_CO_MQ = CARRIER %in% c("CO", "MQ"),
+    CARRIER_DL_US = CARRIER %in% c("DL", "US"),
+    CRS_DEP_TIME15 = HOUR %in% c(15),
+    EVENING = HOUR %in% c(19, 20, 21),
+    Flight.Status = factor(Flight.Status, levels=c("ontime", "delayed"))
+  ) %>%
+  select(Weather, SUN_MON, CARRIER_CO_MQ, CARRIER_DL_US, CRS_DEP_TIME15, EVENING, Flight.Status)
+# create training and holdout sets
+set.seed(1)
+idx <- caret::createDataPartition(reduced.df$Flight.Status, p=0.6, list=FALSE)
+train.df <- reduced.df[idx, ]
+holdout.df <- reduced.df[-idx, ]
+
+# run logistic model, and show coefficients and odds
+model <- caret::train(Flight.Status ~ ., data=train.df,
+                      method="glm", family="binomial", trControl=trControl)
+summary(model$finalModel)
+
+# evaluate
+pred <- predict(model, holdout.df)
+confusionMatrix(pred, holdout.df$Flight.Status)
+
+
+actual <- ifelse(holdout.df$Flight.Status == "delayed", 1, 0)
+pred <- predict(model, holdout.df, type="prob")[, 2]
+redGain <- gains(actual, pred, groups=length(pred))
+
+
+# recreate training and holdout sets
+set.seed(1)
+idx <- caret::createDataPartition(df$Flight.Status, p=0.6, list=FALSE)
+train.df <- df[idx, ]
+holdout.df <- df[-idx, ]
+
+# run logistic model, and show coefficients and odds
+trControl <- caret::trainControl(method="cv", number=5, allowParallel=TRUE)
+tuneGrid <- expand.grid(lambda=10^seq(-1, -3, by=-0.1), alpha=1)
+model <- caret::train(Flight.Status ~ ., data=train.df,
+                      method="glmnet",  family="binomial",
+                      tuneGrid=tuneGrid, trControl=trControl)
+coefs <- coef(model$finalModel, s=model$bestTune$lambda)
+coefs[which(as.matrix(coefs)!=0),]
+
+confusionMatrix(predict(model, holdout.df), holdout.df$Flight.Status)
+
+
+actual <- ifelse(holdout.df$Flight.Status == "delayed", 1, 0)
+pred <- predict(model, holdout.df, type="prob")[, 2]
+lassoGain <- gains(actual, pred, groups=length(pred))
+
+nactual <-sum(actual)
+ggplot() +
+  geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual), color='grey') +
+  geom_line(aes(x=redGain$cume.obs, y=redGain$cume.pct.of.total * nactual)) +
+  geom_line(aes(x=lassoGain$cume.obs, y=lassoGain$cume.pct.of.total * nactual), color='red') +
+  geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
+  labs(x="# cases", y="Cumulative")
+
+ggsave(file=file.path("..", "figures", "chapter_10", "LRFlightDelaysCoefsReduced.pdf"),
+       last_plot() + theme_bw(), width=3, height=3)

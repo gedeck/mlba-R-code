@@ -1,0 +1,102 @@
+
+# TODO: remove once package is available on CRAN
+library(devtools)
+install_github("gedeck/mlba/mlba", force=TRUE)
+
+# Association Rules and Collaborative Filtering
+## Association Rules
+### The Process of Rule Selection
+#### Lift Ratio
+
+library(arules)
+fp.df <- mlba::Faceplate
+
+# remove first column and convert to matrix
+fp.mat <- as.matrix(fp.df[, -1])
+
+# convert the binary incidence matrix into a transactions database
+fp.trans <- as(fp.mat, "transactions")
+inspect(fp.trans)
+
+## get rules
+# when running apriori(), include the minimum support, minimum confidence, and target
+# as arguments.
+rules <- apriori(fp.trans, parameter = list(supp = 0.2, conf = 0.5, target = "rules"))
+
+# inspect the first six rules, sorted by their lift
+inspect(head(sort(rules, by = "lift"), n = 6))
+
+### Example 2: Rules for Similar Book Purchases
+
+all.books.df <- mlba::CharlesBookClub
+
+# create a binary incidence matrix
+count.books.df <- all.books.df[, 8:18]
+incid.books.mat <= as.matrix(count.books.df > 0)
+
+#  convert the binary incidence matrix into a transactions database
+books.trans <- as(incid.books.mat, "transactions")
+inspect(books.trans[1:10])
+
+# plot data
+itemFrequencyPlot(books.trans)
+
+# run apriori function
+rules <- apriori(books.trans,
+    parameter = list(supp= 200/4000, conf = 0.5, target = "rules"))
+
+# inspect top-30 rules sorted by lift
+inspect(head(sort(rules, by = "lift"), n=30))
+
+## Collaborative Filtering
+### 
+
+library(recommenderlab)
+
+# download MovieLens data
+data <- mlba::getMovieLens()
+
+# convert ratings to rating matrix
+idxUserId <- sort(unique(data$ratings$userId))
+idxMovieId <- sort(unique(data$ratings$movieId))
+m <- matrix(NA, nrow=length(idxUserId), ncol=length(idxMovieId),
+            dimnames=list(
+              user=paste("u", 1:length(idxUserId), sep=''),
+              item=data$movies$title[match(idxMovieId, data$movies$movieId)]
+            ))
+for (i in 1:nrow(data$ratings)) {
+  rating <- data$ratings[i,]
+  irow <- match(rating$userId, idxUserId)
+  icol <- match(rating$movieId, idxMovieId)
+  m[irow, icol] <- rating$rating
+}
+ratingMatrix <- as(m, "realRatingMatrix")
+
+
+# UBCF model and prediction
+recommender <- Recommender(ratingMatrix[-1], method="UBCF")
+pred <- predict(recommender, ratingMatrix[1])
+as(pred, 'list')
+
+# IBCF model and prediction
+recommender <- Recommender(ratingMatrix[-1], method="IBCF")
+pred <- predict(recommender, ratingMatrix[1])
+as(pred, 'list')
+
+
+set.seed(1)
+e <- evaluationScheme(ratingMatrix, method="split", train=0.9, given=10)
+
+r1 <- Recommender(getData(e, "train"), "UBCF")
+r2 <- Recommender(getData(e, "train"), "IBCF")
+r3 <- Recommender(getData(e, "train"), "RANDOM")
+
+p1 <- predict(r1, getData(e, "known"), type="ratings")
+p2 <- predict(r2, getData(e, "known"), type="ratings")
+p3 <- predict(r3, getData(e, "known"), type="ratings")
+error <- rbind(
+  UBCF = calcPredictionAccuracy(p1, getData(e, "unknown")),
+  IBCF = calcPredictionAccuracy(p2, getData(e, "unknown")),
+  RANDOM = calcPredictionAccuracy(p3, getData(e, "unknown"))
+)
+error

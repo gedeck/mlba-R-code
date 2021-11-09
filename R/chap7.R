@@ -1,0 +1,84 @@
+
+# TODO: remove once package is available on CRAN
+library(devtools)
+install_github("gedeck/mlba/mlba", force=TRUE)
+
+# $k$-Nearest Neighbors ($k$
+## The $k$-NN Classifier (Categorical Outcome)
+### Example: Riding Mowers
+
+library(ggrepel)
+mower.df <- mlba::RidingMowers
+set.seed(35)
+
+idx <- sample(nrow(mower.df), 0.6*nrow(mower.df))
+train.df <- mower.df[idx, ]
+holdout.df <- mower.df[-idx, ]
+## new household
+new.df <- data.frame(Income = 60, Lot_Size = 20)
+
+ggplot(mapping=aes(x=Income, y=Lot_Size, shape=Ownership, color=Ownership)) +
+  geom_point(data=train.df) +
+  geom_text_repel(aes(label=rownames(train.df)), data=train.df, show.legend = FALSE) +
+  geom_point(data=cbind(new.df, Ownership='New'))
+
+
+g <- ggplot(mapping=aes(x=Income, y=Lot_Size, shape=Ownership, color=Ownership, fill=Ownership)) +
+  geom_point(data=train.df, size=4) +
+  geom_text_repel(aes(label=rownames(train.df)), data=train.df, show.legend = FALSE) +
+  geom_point(data=cbind(new.df, Ownership='New'),  size=5) +
+  scale_shape_manual(values = c(18, 15, 21)) +
+  scale_color_manual(values = c('black', 'darkorange', 'steelblue')) +
+  scale_fill_manual(values = c('black', 'darkorange', 'lightblue'))
+
+g
+
+ggsave(file=file.path("..", "figures", "chapter_07", "knn-riding-mower.pdf"),
+       g + theme_bw(), width=6, height=4, units="in")
+
+
+library(caret)
+# train k-NN model with k=3
+model <- train(Ownership ~ ., data=train.df,
+               method="knn",  # specify the model
+               preProcess=c("center", "scale"),  # normalize data
+               tuneGrid=expand.grid(k=3),
+               trControl=trainControl(method="none"))
+model
+
+# predict new data point
+predict(model, new.df)
+
+# determine nearest neighbors to new data point
+train.norm.df <- predict(model$preProcess, train.df)
+new.norm.df <- predict(model$preProcess, new.df)
+distances <- apply(train.norm.df[, 1:2], 1,
+                   function(d){ sqrt(sum((d - new.norm.df)^2)) })
+rownames(train.df)[order(distances)][1:3]
+
+### Choosing $k$
+
+# use leave-one-out cross-validation for small dataset
+trControl <- trainControl(method="loocv", number=5, allowParallel=TRUE)
+model <- train(Ownership ~ ., data=train.df,
+               method="knn",
+               preProcess=c("center", "scale"),
+               tuneGrid=expand.grid(k=seq(1, 13, 2)),
+               trControl=trControl)
+model
+
+
+model <- train(Ownership ~ ., data=mower.df,
+               method="knn",
+               preProcess=c("center", "scale"),
+               tuneGrid=expand.grid(k=7),
+               trControl=trainControl(method="none"))
+predict(model, new.df)
+
+### Setting the Cutoff Value
+
+train.norm.df <- predict(model$preProcess, train.df)
+new.norm.df <- predict(model$preProcess, new.df)
+distances <- apply(train.norm.df[, 1:2], 1,
+                   function(d){ sqrt(sum((d - new.norm.df)^2)) })
+train.df[order(distances)[1:8],]

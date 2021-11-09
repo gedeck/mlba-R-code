@@ -1,0 +1,74 @@
+---
+title: "Machine Learning for Business Analytics"
+author: "Chapter 13: Combining Methods: Ensembles and Uplift Modeling"
+output:
+  pdf_document:
+    toc: no
+    highlight: tango
+#  html_document:
+#    toc: yes
+#    toc_depth: 4
+#    toc_float: yes
+---
+<style>
+h1.title { font-size: 28px; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 14px; }
+h4 { font-size: 12px; }
+</style>
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
+                      collapse=FALSE,    # collapse by default
+                      echo=TRUE,         # echo code by default
+                      comment = "#>",    # change comment character
+                      fig.width = 5.5,     # set figure width
+                      fig.align = "center",# set figure position
+                      out.width = "49%", # set width of displayed images
+                      warning=FALSE,     # do not show R warnings
+                      message=FALSE,     # do not show R messages
+                      row.print=25)
+```
+
+
+```{r}
+# TODO: remove once package is available on CRAN
+library(devtools)
+install_github("gedeck/mlba/mlba", force=TRUE)
+```
+
+# Ensembles
+## Bagging and Boosting in R
+### Combining Propensities
+```{r}
+library(adabag)
+library(rpart)
+library(caret)
+
+bank.df <- mlba::UniversalBank
+bank.df <- bank.df[ , -c(1, 5)]  # Drop ID and zip code columns.
+
+# transform Personal.Loan into categorical variable
+bank.df$Personal.Loan = as.factor(bank.df$Personal.Loan)
+
+# partition the data
+train.index <- sample(c(1:dim(bank.df)[1]), dim(bank.df)[1]*0.6)
+train.df <- bank.df[train.index, ]
+valid.df <- bank.df[-train.index, ]
+
+# single tree
+tr <- rpart(Personal.Loan ~ ., data = train.df)
+pred <- predict(tr, valid.df, type = "class")
+confusionMatrix(pred, valid.df$Personal.Loan)
+
+# bagging
+bag <- bagging(Personal.Loan ~ ., data = train.df)
+pred <- predict(bag, valid.df, type = "class")
+confusionMatrix(as.factor(pred$class), valid.df$Personal.Loan)
+
+# boosting
+boost <- boosting(Personal.Loan ~ ., data = train.df)
+pred <- predict(boost, valid.df, type = "class")
+confusionMatrix(as.factor(pred$class), valid.df$Personal.Loan)
+```
+

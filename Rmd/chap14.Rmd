@@ -1,0 +1,57 @@
+---
+title: "Machine Learning for Business Analytics"
+author: "Chapter 14: Interventions: Experiments, Uplift Models, and Reinforcement Learning"
+output:
+  pdf_document:
+    toc: no
+    highlight: tango
+#  html_document:
+#    toc: yes
+#    toc_depth: 4
+#    toc_float: yes
+---
+<style>
+h1.title { font-size: 28px; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 14px; }
+h4 { font-size: 12px; }
+</style>
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
+                      collapse=FALSE,    # collapse by default
+                      echo=TRUE,         # echo code by default
+                      comment = "#>",    # change comment character
+                      fig.width = 5.5,     # set figure width
+                      fig.align = "center",# set figure position
+                      out.width = "49%", # set width of displayed images
+                      warning=FALSE,     # do not show R warnings
+                      message=FALSE,     # do not show R messages
+                      row.print=25)
+```
+
+
+# Uplift (Persuasion) Modeling
+## Computing Uplift with Python
+```{r}
+library(uplift)
+voter.df <- mlba::VoterPersuasion
+# transform variable MOVED_AD to numerical
+voter.df$MOVED_AD_NUM <- ifelse(voter.df$MOVED_AD == "Y", 1, 0)
+
+set.seed(1)
+train.index <- sample(c(1:dim(voter.df)[1]), dim(voter.df)[1]*0.6)
+train.df <- voter.df[train.index, ]
+valid.df <- voter.df[-train.index, ]
+
+# use upliftRF to apply a Random Forest (alternatively use upliftKNN() to apply kNN).
+up.fit <- upliftRF(MOVED_AD_NUM ~ AGE + NH_WHITE + COMM_PT + H_F1 + REG_DAYS+
+                   PR_PELIG + E_PELIG + POLITICALC  + trt(MESSAGE_A),
+                 data = train.df, mtry = 3, ntree = 100, split_method = "KL",
+                 minsplit = 200, verbose = TRUE)
+pred <- predict(up.fit, newdata = valid.df)
+# first column: p(y | treatment)
+# second column: p(y | control)
+head(data.frame(pred, "uplift" = pred[,1] - pred[,2]))
+```
+
