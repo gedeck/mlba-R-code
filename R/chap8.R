@@ -1,20 +1,17 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999, digits = 3)
 
 # The Naive Bayes Classifier
-
-library(mlba)
-library(tidyverse)
-library(e1071)
-library(caret)
-library(gains)
-
 ## Solution: Naive Bayes
 ### Example 3: Predicting Delayed Flights
 
+library(tidyverse)
+library(caret)
+library(e1071)
 # load and preprocess dataset
 delays.df <- mlba::FlightDelays %>%
   mutate(
@@ -40,6 +37,8 @@ delays.nb <- naiveBayes(Flight.Status ~ ., data = train.df)
 delays.nb
 
 
+
+
 # use prop.table() with margin = 1 to convert a count table to a proportions table,
 # where each row sums up to 1 (use margin = 2 for column sums)
 prop.table(table(train.df$Flight.Status, train.df$DEST), margin = 1)
@@ -63,6 +62,7 @@ confusionMatrix(predict(delays.nb, newdata=train.df), train.df$Flight.Status)
 confusionMatrix(predict(delays.nb, newdata=holdout.df), holdout.df$Flight.Status)
 
 
+library(gains)
 actual <- ifelse(holdout.df$Flight.Status == "delayed", 1, 0)
 gain <- gains(actual, pred.prob[,"delayed"], groups=length(actual) - 2)
 
@@ -77,7 +77,7 @@ ggsave(file=file.path("..", "figures", "chapter_08", "Flights-NB-gain.pdf"),
        width=3, height=3,
        last_plot() + theme_bw())
 
-### 
+### Working with Continuous Predictors
 
   (p_delayed = dnorm(213, mean=211.36215, sd=15.31))
   (p_ontime = dnorm(213, mean=211.99436, sd=12.79))

@@ -32,9 +32,11 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+options(scipen=999) # avoid scientific notation
 ```
 
 # Evaluating Predictive Performance
@@ -45,29 +47,29 @@ set.seed(1)
 
 # load and preprocess file
 car.df <- mlba::ToyotaCorolla %>%
-    select(-one_of('Id', 'Model', 'Fuel_Type', 'Color')) %>%
+    select(-one_of("Id", "Model", "Fuel_Type", "Color")) %>%
     drop_na()
 
 
-# randomly generate training and validation sets
+# randomly generate training and holdout sets
 idx <- caret::createDataPartition(car.df$Price, p=0.6, list=FALSE)
 train.df <- car.df[idx, ]
-valid.df <- car.df[-idx, ]
+holdout.df <- car.df[-idx, ]
 
 # run linear regression model
 reg <- lm(Price~., data=train.df)
 pred_t <- predict(reg)
-pred_v <- predict(reg, newdata=valid.df)
+pred_h <- predict(reg, newdata=holdout.df)
 
 ## evaluate performance
 # training
 caret::RMSE(pred_t, train.df$Price)
-# validation
-caret::RMSE(pred_v, valid.df$Price)
-# use utlitiy function from the mlba package to calculate various metrics at once
+# holdout
+caret::RMSE(pred_h, holdout.df$Price)
+# use utility function from the mlba package to calculate various metrics at once
 rbind(
   Training=mlba::regressionSummary(pred_t, train.df$Price),
-  Validation=mlba::regressionSummary(pred_v, valid.df$Price)
+  Holdout=mlba::regressionSummary(pred_h, holdout.df$Price)
 )
 ```
 
@@ -76,133 +78,369 @@ library(ggplot2)
 library(gridExtra)
 
 train.residuals <- train.df$Price - pred_t
-valid.residuals <- valid.df$Price - pred_v
-res.min <- min(train.residuals, valid.residuals)
-res.max <- max(train.residuals, valid.residuals)
+holdout.residuals <- holdout.df$Price - pred_h
+res.min <- min(train.residuals, holdout.residuals)
+res.max <- max(train.residuals, holdout.residuals)
 
 g1 <- ggplot() +
-    geom_histogram(aes(x=train.residuals), fill='lightgray', color='grey') +
-    labs(x='', y='Training') +
+    geom_histogram(aes(x=train.residuals), fill="lightgray", color="grey") +
+    labs(x="", y="Training") +
     xlim(res.min, res.max) +
     theme_bw()
 
 g2 <- ggplot() +
-    geom_histogram(aes(x=valid.residuals), fill='lightgray', color='grey') +
-    labs(x='', y='Validation') +
+    geom_histogram(aes(x=holdout.residuals), fill="lightgray", color="grey") +
+    labs(x="", y="Holdout") +
     xlim(res.min, res.max) +
     theme_bw()
 
 df <- data.frame(
-  residual=c(train.residuals, valid.residuals),
-  role=c(rep('Training', length(train.residuals)), rep('Validation', length(valid.residuals)))
+  residual=c(train.residuals, holdout.residuals),
+  role=c(rep("Training", length(train.residuals)), rep("Holdout", length(holdout.residuals)))
 )
 g3 <- ggplot(df, aes(x=role, y=residual)) +
     geom_boxplot() +
-    labs(x='', y='') +
+    labs(x="", y="") +
     theme_bw()
 
 grid.arrange(g1, g2, g3, ncol=3)
 
 g <- arrangeGrob(g1, g2, g3, ncol=3)
-ggsave(file=file.path('..', 'figures', 'chapter_05', 'residuals-full-model.pdf'),
-       g, width=8, height=2.25, units='in')
+
+ggsave(file=file.path("..", "figures", "chapter_05", "residuals-full-model.pdf"),
+       g, width=8, height=2.25, units="in")
 ```
 
-## Lift Chart
+## Cumulative Gains and Lift Charts
 ```{r}
-# predictions
-pred_v <- predict(reg, newdata=valid.df)
+library(ggplot2)
+library(gridExtra)
 
 # load package gains, compute gains (we will use package caret for categorical y later)
 library(gains)
-gain <- gains(valid.df$Price, pred_v)
+price <- holdout.df$Price
+gain <- gains(price, pred_h)
 
 # cumulative lift chart
-options(scipen=999) # avoid scientific notation
 # we will compute the gain relative to price
-price <- valid.df$Price
-plot(c(0,gain$cume.pct.of.total*sum(price))~c(0,gain$cume.obs),
-     xlab="# cases", ylab="Cumulative Price", main="Lift Chart", type="l")
-
-# baseline
-lines(c(0,sum(price))~c(0, nrow(valid.df)), col="gray", lty=2)
+df <- data.frame(
+  ncases=c(0, gain$cume.obs),
+  cumPrice=c(0, gain$cume.pct.of.total * sum(price))
+)
+g1 <- ggplot(df, aes(x=ncases, y=cumPrice)) +
+  geom_line() +
+  geom_line(data=data.frame(ncases=c(0, nrow(holdout.df)), cumPrice=c(0, sum(price))),
+            color="gray", linetype=2) + # adds baseline
+  labs(x="# cases", y="Cumulative Price", title="Cumulative gains chart")
 
 # Decile-wise lift chart
-barplot(gain$mean.resp/mean(price), names.arg = gain$depth,
-        xlab = "Percentile", ylab = "Mean Response", main = "Decile-wise lift chart")
+df <- data.frame(
+  percentile=gain$depth,
+  meanResponse=gain$mean.resp / mean(price)
+)
+g2 <- ggplot(df, aes(x=percentile, y=meanResponse)) +
+  geom_bar(stat="identity") +
+  labs(x="Percentile", y="Decile Mean / Global Mean", title="Decile-wise lift chart")
+
+grid.arrange(g1, g2, ncol=2)
+```
+
+```{r}
+g <- arrangeGrob(
+  g1 + theme_bw(),
+  g2 + theme_bw() + scale_x_continuous(breaks = seq(10, 100, by = 10)),
+  ncol=2)
+ggsave(file=file.path("..", "figures", "chapter_05", "MLR-toyotalift.pdf"),
+       g, width=8, height=4, units="in")
 ```
 
 # Judging Classifier Performance
-## Propensities and Cutoff for Classification
+## The Confusion (Classification) Matrix
+```{r}
+mowers.df <- mlba::RidingMowers
+  g1 <- ggplot(mowers.df, mapping=aes(x=Income, y=Lot_Size, color=Ownership, fill=Ownership)) +
+    geom_point(size=4) +
+    scale_shape_manual(values = c(15, 21)) +
+    scale_color_manual(values = c("darkorange", "steelblue")) +
+    scale_fill_manual(values = c("darkorange", "lightblue"))
+
+  makePlot  <- function(df, title, alpha) {
+    no_personal_loan <- subset(df, Personal.Loan == 0)
+    personal_loan <- subset(df, Personal.Loan == 1)
+    g <- ggplot(universal.df, aes(x=Income, y=CCAvg)) +
+        geom_point(data=no_personal_loan, alpha=alpha,
+                  color="lightblue") +
+        geom_point(data=personal_loan, color="steelblue") +
+        labs(title=title, colour="Personal\nLoan", x="Annual income ($000s)",
+             y="Monthly average credict card spending ($000s)") +
+        scale_color_brewer(palette="Set1",
+               guide=guide_legend(override.aes=list(size=3, alpha=1))) +
+        scale_x_log10() +
+        scale_y_log10() +
+        theme_bw()
+    return (g)
+  }
+
+  universal.df <- mlba::UniversalBank
+  g2 <- makePlot(universal.df, "", 0.5)
+
+  grid.arrange(g1, g2, nrow=2)
+
+  g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), nrow=2)
+  ggsave(file=file.path("..", "figures", "chapter_05", "ClassSeparation.pdf"),
+         g, width=5, height=8, units="in")
+```
+
+## Propensities and Threshold for Classification
 ```{r}
 # note: function confusionMatrix requires library caret
 library(caret)
-owner.df <- mlba::ownerExample
-## cutoff = 0.5
-confusionMatrix(factor(ifelse(owner.df$Probability>0.5, 'owner', 'nonowner')), owner.df$Class)$table
+owner.df <- mlba::OwnerExample
+## threshold = 0.5
+confusionMatrix(factor(ifelse(owner.df$Probability>0.5, "owner", "nonowner")),
+                owner.df$Class)$table
 # note: "reference" = "actual"
-## cutoff = 0.25
-confusionMatrix(factor(ifelse(owner.df$Probability>0.25, 'owner', 'nonowner')), owner.df$Class)$table
-## cutoff = 0.75
-confusionMatrix(factor(ifelse(owner.df$Probability>0.75, 'owner', 'nonowner')), owner.df$Class)$table
+## threshold = 0.25
+confusionMatrix(factor(ifelse(owner.df$Probability>0.25, "owner", "nonowner")),
+                owner.df$Class)$table
+## threshold = 0.75
+confusionMatrix(factor(ifelse(owner.df$Probability>0.75, "owner", "nonowner")),
+                owner.df$Class)$table
 ```
 
 ```{r}
 # replace data.frame with your own
-df <- mlba::liftExample
+df <- mlba::LiftExample
 
-# create empty accuracy table
-accT = c()
-
-# compute accuracy per cutoff
+# compute accuracy per threshold
+result = data.frame()
 for (cut in seq(0,1,0.1)){
   cm <- confusionMatrix(factor(1 * (df$prob > cut), levels=c(0,1)),
                         factor(df$actual, levels=c(0,1)))
-  accT = c(accT, cm$overall[1])
+  result <- bind_rows(result,
+                      c(Threshold=cut, cm$overall["Accuracy"]))
 }
+result$Error <- 1 - result$Accuracy
 
-# plot accuracy
-plot(accT ~ seq(0,1,0.1), xlab = "Cutoff Value", ylab = "", type = "l", ylim = c(0, 1))
-lines(1-accT ~ seq(0,1,0.1), type = "l", lty = 2)
-legend("topright",  c("accuracy", "overall error"), lty = c(1, 2), merge = TRUE)
+# plot accuracy and error rate
+ggplot(result, aes(x=Threshold)) +
+  geom_line(aes(y=Accuracy, linetype="Accuracy")) +
+  geom_line(aes(y=Error, linetype="Overall error"), color="gray") +
+  labs(x="Threshold Value", y="", linetype="Legend")
+```
+
+```{r}
+g <- last_plot() + theme_bw() +
+        scale_linetype(guide=guide_legend(override.aes=list(color="black")))
+  ggsave(file=file.path("..", "figures", "chapter_05", "cutoffPlot.pdf"),
+         g, width=6, height=4, units="in")
 ```
 
 ## Performance in Case of Unequal Importance of Classes
+### ROC Curve
 ```{r}
-library(pROC)
-r <- roc(df$actual, df$prob)
-plot.roc(r)
+library(ROCR)
+predob <- prediction(df$prob, df$actual)
+perf <- performance(predob, "tpr", "fpr")
+perf.df <- data.frame(
+  tpr=perf@x.values[[1]],
+  fpr=perf@y.values[[1]]
+)
+ggplot(perf.df, aes(x=tpr, y=fpr)) +
+  geom_line() +
+  geom_segment(aes(x=0, y=0, xend=1, yend=1), color="grey", linetype="dashed") +
+  labs(x="1 - Specificity", y="Sensitivity")
 
-# compute auc
-auc(r)
+# get the AUC value
+performance(predob, measure="auc")@y.values[[1]]
+```
+
+```{r}
+ggsave(file=file.path("..", "figures", "chapter_05", "rocRidingMower.pdf"),
+       last_plot() + theme_bw(), width=4, height=4, units="in")
+```
+
+### Precision and Recall
+```{r}
+library(ROCR)
+
+predob <- prediction(df$prob, df$actual)
+perf <- performance(predob, "tpr", "fpr")
+perf.df <- data.frame(
+  threshold=performance(predob, "prec")@x.values[[1]],
+  precision=performance(predob, "prec")@y.values[[1]],
+  recall=performance(predob, "rec")@y.values[[1]]
+)
+perf.df$f1 = 2*perf.df$precision*perf.df$recall / (perf.df$recall + perf.df$precision)
+g <- ggplot(perf.df, aes(x=threshold)) +
+  geom_line(aes(y=precision, color="precision", linetype="precision"), size=1) +
+  geom_line(aes(y=recall, color="recall", linetype="recall"), size=1) +
+  geom_line(aes(y=f1, color="f1", linetype="f1"), size=1) +
+  labs(x="Threshold", y="Metric", linetype="Metrics", color="Metrics")
+g
+
+ggsave(file=file.path("..", "figures", "chapter_05", "precision-recall.pdf"),
+       g + theme_bw() + theme(legend.key.size = unit(1, "cm")),
+       width=6, height=4, units="in")
 ```
 
 # Judging Ranking Performance
-## Lift Charts for Binary Data
-### Sorting by Propensity
+## Cumulative Gains and Lift Charts for Binary Data
+### Cumulative Gains Chart
 ```{r}
-# first option with 'caret' library:
-library(caret)
-lift.example <- lift(relevel(as.factor(actual), ref="1") ~ prob, data = df)
-xyplot(lift.example, plot = "gain")
+df <- mlba::LiftExample %>%
+  mutate(actual=relevel(factor(actual), ref="1"))
 
-# Second option with 'gains' library:
+# first option with 'ROCR' library:
+pred <- prediction(df$prob, df$actual)
+perf <- performance(pred, "tpr", "rpp")
+plot(perf, xlab="Ratio of Cases", ylab="Ratio of Samples Found")
+lines(c(0, 1), c(0, 1), lty='dashed')
+
+# second option with 'caret' library:
+# load data and make actual a factor variable with 1 as the reference class
+lift.example <- caret::lift(actual ~ prob, data=df)
+ggplot(lift.example, plot = "gain")
+
+# third option with 'gains' library:
 library(gains)
-df <- mlba::liftExample
+df <- mlba::LiftExample
 gain <- gains(df$actual, df$prob, groups=nrow(df))
-plot(c(0, gain$cume.pct.of.total*sum(df$actual)) ~ c(0, gain$cume.obs),
-     xlab = "# cases", ylab = "Cumulative", type="l")
-lines(c(0,sum(df$actual))~c(0,nrow(df)), col="gray", lty=2)
+result <- data.frame(
+  ncases=c(0, gain$cume.obs),
+  cumulative=sum(df$actual)*c(0, gain$cume.pct.of.total)
+)
+ggplot(result, aes(x=ncases, y=cumulative)) +
+  geom_line() +
+  geom_segment(aes(x=0, y=0, xend=nrow(df), yend=sum(df$actual)),
+               color="gray", linetype=2) + # adds baseline
+  labs(x="# Cases", y="# Samples Found")
 ```
 
-## Decile Lift Charts
-### Interpreting the lift chart
 ```{r}
-# use gains() to compute deciles.
-# when using the caret package, deciles must be computed manually.
+g3 <- last_plot()
+# use ggplot with ROCR result
+perf.df <- data.frame(
+  tpr=perf@x.values[[1]],
+  fpr=perf@y.values[[1]]
+)
+g1 <- ggplot(perf.df, aes(x=tpr, y=fpr)) +
+  geom_line() +
+  geom_segment(aes(x=0, y=0, xend=1, yend=1), color="grey", linetype="dashed") +
+  labs(x="Ratio of Cases", y="Ratio of Samples Found")
 
-gain <- gains(df$actual, df$prob,)
-barplot(gain$mean.resp / mean(df$actual), names.arg = gain$depth, xlab = "Percentile",
-        ylab = "Mean Response", main = "Decile-wise lift chart")
+g2 <- ggplot(lift.example, plot = "gain")
+
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), g3 + theme_bw(), ncol=3)
+ggsave(file=file.path("..", "figures", "chapter_05", "gainsChartClassification.pdf"),
+       g, width=12, height=4, units="in")
+```
+
+## Decile-wise Lift Charts
+### Interpreting the Cumulative Gains Chart
+```{r}
+df <- mlba::LiftExample
+
+# use gains() to compute deciles.
+gain <- gains(df$actual, df$prob)
+barplot(gain$mean.resp / mean(df$actual), names.arg=seq(10, 100, by=10),
+        xlab="Percentile", ylab="Decile Mean / Global Mean")
+```
+
+```{r}
+pdf(file=file.path("..", "figures", "chapter_05", "decileLiftClassification.pdf"),
+    width=6, height=4)
+  barplot(gain$mean.resp / mean(df$actual), names.arg=seq(10, 100, by=10),
+          xlab="Percentile", ylab="Decile Mean / Global Mean")
+dev.off()
+
+# Here is code to achieve the same using ROCR with the performance data used for
+# the cumulative gains chart
+pred <- prediction(df$prob, df$actual)
+perf <- performance(pred, "tpr", "rpp")
+
+x <- perf@x.values[[1]]
+y <- perf@y.values[[1]]
+
+
+last <- c(0, 0)
+decileLift <- tibble()
+for (decile in seq(0.1, 1, by=0.1)) {
+  idx <- max(which(x < decile))
+  current <- c(x[idx], y[idx])
+  deltas <- current - last
+  currentLift <- deltas[2] / deltas[1]
+  decileLift <- rbind(decileLift, c(current[1], currentLift))
+  last <- current
+}
+colnames(decileLift) <- c("Percentile", "Decile Mean / Global Mean")
+print(decileLift)
+barplot(decileLift[,"Decile Mean / Global Mean"], names.arg=round(100*decileLift$Percentile, 0),
+        xlab="Percentile", ylab="Decile Mean / Global Mean")
+```
+
+## Cumulative Gains as a Function of Threshold
+```{r}
+df <- mlba::LiftExample %>%  mutate(actual=relevel(factor(actual), ref="1"))
+```
+
+```{r}
+plot(caret::lift(actual ~ prob, data=df), plot="lift")
+```
+
+# Oversampling
+## Evaluating Model Performance if Only Oversampled Holdout Set Exists
+### II. Adjusting the Cumulative Gains Chart for Oversampling
+```{r}
+lift <- c(7, 2.5, 0.5, 0.25, 0.25, 0.1, 0.1, 0.1, 0.1, 0.1)
+  pdf(file=file.path("..", "figures", "chapter_05", "prob5-4.pdf"),
+    width=6, height=4)
+    barplot(lift, names.arg=seq(10, 100, by=10),
+            xlab="Percentile", ylab="Decile Mean / Global Mean")
+  dev.off()
+```
+
+```{r}
+df <- read.csv('p5.csv')
+
+set.seed(1)
+idx <- caret::createDataPartition(df$sales, p=0.6, list=FALSE)
+train.df <- df[idx,]
+holdout.df <- df[-idx,]
+model <- train(sales ~ ., data=train.df, method="lm", trControl=trainControl(method="none"))
+result <- data.frame(
+  predicted=predict(model, holdout.df),
+  actual=holdout.df$sales
+)
+
+price <- holdout.df$sales
+
+# cumulative lift chart
+# we will compute the gain relative to price
+gain <- gains(holdout.df$sales, predict(model, holdout.df), groups=100)
+df <- data.frame(
+  ncases=c(0, gain$cume.obs),
+  cumPrice=c(0, gain$cume.pct.of.total * sum(price))
+)
+options(scipen=999) # avoid scientific notation
+g1 <- ggplot(df, aes(x=ncases, y=cumPrice)) +
+  geom_line() +
+  geom_line(data=data.frame(ncases=c(0, nrow(holdout.df)), cumPrice=c(0, sum(price))),
+            color="gray", linetype=2) + # adds baseline
+  labs(x="# cases", y="Cumulative Price", title="Cumulative gains chart")
+# Decile-wise lift chart
+gain <- gains(holdout.df$sales, predict(model, holdout.df))
+df <- data.frame(
+  percentile=gain$depth,
+  meanResponse=gain$mean.resp / mean(holdout.df$sales)
+)
+g2 <- ggplot(df, aes(x=percentile, y=meanResponse)) +
+  geom_bar(stat="identity") +
+  labs(x="Percentile", y="Decile Mean / Global Mean", title="Decile-wise lift chart")
+grid.arrange(g1, g2, ncol=2)
+
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2)
+ggsave(file=file.path("..", "figures", "chapter_05", "exercise-gains-lift-software.pdf"),
+       g, width=8, height=4, units="in")
 ```
 

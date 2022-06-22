@@ -32,12 +32,11 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999)
-
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
-# library(mlba)
 ```
 
 # The Logistic Regression Model
@@ -248,7 +247,6 @@ barplot(aggregate(delays.df$Flight.Status == "delayed", by = list(delays.df$DAY_
 ```
 
 ```{r}
-library(reshape)
 # create matrix for plot
 agg <- delays.df %>%
   mutate(isDelay=1 * (delays.df$Flight.Status == "delayed")) %>%

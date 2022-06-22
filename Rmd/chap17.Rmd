@@ -32,15 +32,17 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 ```
 
 # Time Series Components
 ## Example: Ridership on Amtrak Trains
 ```{r}
 library(forecast)
+library(ggplot2)
 Amtrak.data <- mlba::Amtrak
 
 # create time series object using ts()
@@ -51,65 +53,132 @@ Amtrak.data <- mlba::Amtrak
 ridership.ts <- ts(Amtrak.data$Ridership,
     start = c(1991, 1), end = c(2004, 3), freq = 12)
 
-# plot the series
-plot(ridership.ts, xlab = "Time", ylab = "Ridership (in 000s)", ylim = c(1300, 2300))
+# plot the series using the autoplot function to make use of ggplot
+autoplot(ridership.ts, xlab="Time", ylab="Ridership (in 000s)") +
+  scale_y_continuous(limits=c(1300, 2300))
 ```
 
 ```{r}
-library(forecast)
-
-# create short time series
-# use window() to create a new, shorter time series of ridership.ts
-# for the new three-year series, start time is Jan 1997 and end time is Dec 1999
-ridership.ts.3yrs <- window(ridership.ts, start = c(1997, 1), end = c(1999, 12))
-
-# fit a linear regression model to the time series
-ridership.lm <- tslm(ridership.ts ~ trend + I(trend^2))
-
-# shorter and longer time series
-par(mfrow = c(2, 1))
-plot(ridership.ts.3yrs, xlab = "Time", ylab = "Ridership (in 000s)",
-                        ylim = c(1300, 2300))
-plot(ridership.ts, xlab = "Time", ylab = "Ridership (in 000s)", ylim = c(1300, 2300))
-
-# overlay the fitted values of the linear model
-lines(ridership.lm$fitted, lwd = 2)
+g <- last_plot() +
+    scale_x_continuous(n.breaks=10) +
+    theme_bw()
+  ggsave(file=file.path("..", "figures", "chapter_17", "AmtrakFirstPlot.pdf"),
+         g, width=6, height=3, units="in")
 ```
 
-# Data-Partitioning and Performance Evaluation
+```{r}
+library(gridExtra)
+  library(lubridate)
+  library(zoo)
+
+  BareggTunnel <- mlba::BareggTunnel
+  # convert Day information to a dates object
+  dates <- as.POSIXct(BareggTunnel$Day, format='%d %b %Y')
+  tunnel.ts <- ts(BareggTunnel$Number.of.vehicles,
+                  start=c(2003, yday(dates[1])),
+                  frequency=365)
+
+  options(scipen=999)
+  g1 <- autoplot(tunnel.ts, xlab="Time", ylab="Number of Vehicles") +
+    scale_x_yearmon()
+  g2 <- autoplot(window(tunnel.ts,
+                 start=c(2004, yday(ISOdate(2004, 2, 1))),
+                 end=c(2004, yday(ISOdate(2004, 6, 1)))),
+                 xlab="Time", ylab="Number of Vehicles") +
+    scale_x_yearmon()
+
+  grid.arrange(g1, g2, nrow=2)
+  g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+  ggsave(file=file.path("..", "figures", "chapter_17", "TS-TunnelPlots.pdf"), g,
+           width=6, height=4)
+```
+
+```{r}
+library(gridExtra)
+
+# to zoom in to a certain period, use window() to create a new, shorter time series
+# we create a new, 3-year time series of ridership.ts from Jan 1997 to Dec 1999
+ridership.ts.3yrs <- window(ridership.ts, start = c(1997, 1), end = c(1999, 12))
+g1 <- autoplot(ridership.ts.3yrs, xlab="Time", ylab="Ridership (in 000s)") +
+  scale_y_continuous(limits=c(1300, 2300))
+
+# fit a trend line to the time series
+g2 <- autoplot(ridership.ts, xlab="Time", ylab="Ridership (in 000s)") +
+  scale_y_continuous(limits=c(1300, 2300)) +
+  geom_smooth(method="lm", formula=y~poly(x, 2))
+
+grid.arrange(g1, g2, nrow=2)
+```
+
+```{r}
+g <- arrangeGrob(g1 + theme_bw(),
+                   g2 + scale_x_continuous(n.breaks=10) + theme_bw())
+  ggsave(file=file.path("..", "figures", "chapter_17", "AmtrakZoomPlots.pdf"), g,
+         width=6, height=6)
+
+# we can also use tslm to create the quadratic fit
+ridership.lm <- tslm(ridership.ts ~ trend + I(trend^2))
+autoplot(ridership.ts, xlab="Time", ylab="Ridership (in 000s)") +
+  scale_y_continuous(limits=c(1300, 2300)) +
+  autolayer(ridership.lm$fitted.values)
+```
+
+# Data Partitioning and Performance Evaluation
 ## Benchmark Performance: Naive Forecasts
 ```{r}
-nValid <- 36
-nTrain <- length(ridership.ts) - nValid
+nTest <- 36
+nTrain <- length(ridership.ts) - nTest
 
 # partition the data
 train.ts <- window(ridership.ts, start = c(1991, 1), end = c(1991, nTrain))
-valid.ts <- window(ridership.ts, start = c(1991, nTrain + 1),
-                                 end = c(1991, nTrain + nValid))
+test.ts <- window(ridership.ts, start = c(1991, nTrain + 1),
+                                   end = c(1991, nTrain + nTest))
 
-#  generate the naive and seasonal naive forecasts
-naive.pred <- naive(train.ts, h = nValid)
-snaive.pred <- snaive(train.ts, h = nValid)
+# generate the naive and seasonal naive forecasts
+naive.pred <- naive(train.ts, h=nTest)
+snaive.pred <- snaive(train.ts, h=nTest)
 
-# plot forecasts and actuals in the training and validation sets
-plot(train.ts, ylim = c(1300, 2600),  ylab = "Ridership", xlab = "Time", bty = "l",
-    xaxt = "n", xlim = c(1991,2006.25), main = "")
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(naive.pred$mean, lwd = 2, col = "blue", lty = 1)
-lines(snaive.pred$mean, lwd = 2, col = "blue", lty = 1)
-lines(valid.ts, col = "grey20", lty = 3)
-lines(c(2004.25 - 3, 2004.25 - 3), c(0, 3500))
-lines(c(2004.25, 2004.25), c(0, 3500))
-text(1996.25, 2500, "Training")
-text(2002.75, 2500, "Validation")
-text(2005.25, 2500, "Future")
-arrows(2004 - 3, 2450, 1991.25, 2450, code = 3, length = 0.1, lwd = 1,angle = 30)
-arrows(2004.5 - 3, 2450, 2004, 2450, code = 3, length = 0.1, lwd = 1,angle = 30)
-arrows(2004.5, 2450, 2006, 2450, code = 3, length = 0.1, lwd = 1, angle = 30)
+# compare the actual values and forecasts for both methods
+colData <- "steelblue"; colModel <- "tomato"
+autoplot(train.ts, xlab="Time", ylab="Ridership (in 000s$)", color=colData) +
+  autolayer(test.ts, linetype=2, color=colData) +
+  autolayer(naive.pred, PI=FALSE, color=colModel, size=0.75) +
+  autolayer(snaive.pred, PI=FALSE, color=colModel, size=0.75)
 ```
 
 ```{r}
-accuracy(naive.pred, valid.ts)
-accuracy(snaive.pred, valid.ts)
+# for the book visualization add additional annotation
+delta <- 1/12
+date_t <- time(train.ts)[1]
+date_th <- time(test.ts)[1] - delta
+date_hf <- tail(time(test.ts), 1) + delta
+g <- last_plot() +
+  geom_vline(xintercept=date_th, color="darkgrey") + geom_vline(xintercept=date_hf, color="darkgrey") +
+  geom_segment(aes(x=date_t, xend=date_th-delta, y=2300, yend=2300), color="darkgrey") +
+  geom_segment(aes(x=date_th+delta, xend=date_hf-delta, y=2300, yend=2300), color="darkgrey")  +
+  geom_segment(aes(x=date_hf+delta, xend=date_hf+2, y=2300, yend=2300), color="darkgrey") +
+  geom_text(aes(x=(date_t+date_th)/2, y=2350, label='Training')) +
+  geom_text(aes(x=(date_th+date_hf)/2, y=2350, label='Test')) +
+  geom_text(aes(x=date_hf+1, y=2350, label='Future')) +
+  scale_x_continuous(n.breaks=10) +
+  theme_bw()
+ggsave(file=file.path("..", "figures", "chapter_17", "AmtrakNaive.pdf"),
+       g, width=7, height=4.5)
+```
+
+```{r}
+accuracy(naive.pred, test.ts)
+accuracy(snaive.pred, test.ts)
+```
+
+## Generating Future Forecasts
+```{r}
+ts <- ts(mlba::CanadianWorkHours$Hours,
+    start = c(mlba::CanadianWorkHours$Year[1], 1), freq = 1)
+
+# plot the series using the autoplot function to make use of ggplot
+autoplot(ts, xlab="Year", ylab="Hours per week")
+ggsave(file=file.path("..", "figures", "chapter_17", "Exercise-CanadianWorkers.pdf"),
+         last_plot() + theme_bw(), width=5, height=4, units="in")
 ```
 

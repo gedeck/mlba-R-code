@@ -1,12 +1,15 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+options(scipen=999)
 
-# Overview of the Data Mining Process
+# Overview of the Machine Learning Process
 ## Preliminary Steps 
 ### Loading and Looking at the Data in R
 
+housing.df <- read.csv('WestRoxbury.csv') # load data from file
 housing.df <- mlba::WestRoxbury # load data from mlba package
 dim(housing.df)  # find the dimension of data frame
 head(housing.df)  # show the first six rows
@@ -26,25 +29,42 @@ summary(housing.df)  # find summary statistics for each column
 
 ### Sampling from a Database
 
+housing.df <- mlba::WestRoxbury
+
 # random sample of 5 observations
 s <- sample(row.names(housing.df), 5)
 housing.df[s,]
 
 # oversample houses with over 10 rooms
-s <- sample(row.names(housing.df), 5, prob = ifelse(housing.df$ROOMS>10, 0.9, 0.01))
+s <- sample(row.names(housing.df), 5, prob=ifelse(housing.df$ROOMS>10, 0.9, 0.01))
 housing.df[s,]
+
+# rebalance
+housing.df$REMODEL <- factor(housing.df$REMODEL)
+table(housing.df$REMODEL)
+upsampled.df <- caret::upSample(housing.df, housing.df$REMODEL, list=TRUE)$x
+table(upsampled.df$REMODEL)
+
+
 
 ### Preprocessing and Cleaning the Data
 #### Types of Variables
 
-names(housing.df)  # print a list of variables to the screen.
-t(t(names(housing.df)))  # print the list in a useful column format
-colnames(housing.df)[1] <- c("TOTAL.VALUE")  # change the first column's name
-class(housing.df$REMODEL) # REMODEL is a factor variable
-class(housing.df[ ,14]) # Same.
-levels(housing.df[, 14])  # It can take one of three levels
-class(housing.df$BEDROOMS)  # BEDROOMS is an integer variable
-class(housing.df[, 1])  # TOTAL.VALUE is a numeric variable
+library(tidyverse)
+
+# get overview
+str(housing.df)
+
+# make REMODEL a factor variable
+housing.df$REMODEL <- factor(housing.df$REMODEL)
+str(housing.df$REMODEL)
+levels(housing.df$REMODEL) # show factor's categories (levels)
+
+# use tidyverse to load and preprocess data in one statement
+# the %>% operator inserts the result of the expression on the left
+# as the first argument into the function on the right
+housing.df <- mlba::WestRoxbury %>%
+  mutate(REMODEL=factor(REMODEL))
 
 #### Handling Categorical Variables
 
@@ -54,48 +74,46 @@ library(tidyverse)
 housing.df <- dummy_cols(mlba::WestRoxbury,
                  remove_selected_columns=TRUE,  # remove the original column
                  remove_first_dummy=TRUE)  # removes the first created dummy variable
-housing.df %>% select(contains("REMODEL")) %>% head(2)
+housing.df %>% head(2)
 
-#### Outliers
+#### Missing Values
 
 # To illustrate missing data procedures, we first convert a few entries for
-# bedrooms to NA's. Then we impute these missing values using the median of the
+# BEDROOMS to NA's. Then we impute these missing values using the median of the
 # remaining values.
 rows.to.missing <- sample(row.names(housing.df), 10)
 housing.df[rows.to.missing,]$BEDROOMS <- NA
-summary(housing.df$BEDROOMS)  # Now we have 10 NA's and the median of the
-# remaining values is 3.
+summary(housing.df$BEDROOMS)
+# Now we have 10 NA's and the median of the remaining values is 3.
 
-# replace the missing values using the median of the remaining values.
-# use median() with na.rm = TRUE to ignore missing values when computing the median.
-housing.df[rows.to.missing,]$BEDROOMS <- median(housing.df$BEDROOMS, na.rm = TRUE)
+# replace the missing values using the median of the remaining values
+# use median() with na.rm=TRUE to ignore missing values when computing the median.
+housing.df <- housing.df %>%
+  replace_na(list(BEDROOMS=median(housing.df$BEDROOMS, na.rm=TRUE)))
 
 summary(housing.df$BEDROOMS)
 
 ## Predictive Power and Overfitting
-### Creation and Use of Data Partitions
-#### Test Partition
+### Creating and Using Data Partitions
+#### Holdout Partition
 
-housing.df <- mlba::WestRoxbury
+housing.df <- mlba::WestRoxbury %>%
+  mutate(REMODEL=factor(REMODEL))
 
 # use set.seed() to get the same partitions when re-running the R code.
 set.seed(1)
 
-## partitioning into training (60%) and validation (40%)
-# randomly sample 60% of the row IDs for training; the remaining 40% serve as
-# validation
+## partitioning into training (60%) and holdout (40%)
+# randomly sample 60% of the row IDs for training; the remaining 40% serve
+# as holdout
 train.rows <- sample(rownames(housing.df), nrow(housing.df)*0.6)
 # collect all the columns with training row ID into training set:
-train.data <- housing.df[train.rows, ]
-# assign row IDs that are not already in the training set, into validation
-valid.rows <- setdiff(rownames(housing.df), train.rows)
-valid.data <- housing.df[valid.rows, ]
+train.df <- housing.df[train.rows, ]
+# assign row IDs that are not already in the training set, into holdout
+holdout.rows <- setdiff(rownames(housing.df), train.rows)
+holdout.df <- housing.df[holdout.rows, ]
 
-# alternative code for validation (works only when row names are numeric):
-# collect all the columns without training row ID into validation set
-# valid.data <- housing.df[-train.rows, ] # does not work in this case
-
-## partitioning into training (50%), validation (30%), test (20%)
+## partitioning into training (50%), validation (30%), holdout (20%)
 # randomly sample 50% of the row IDs for training
 train.rows <- sample(rownames(housing.df), nrow(housing.df)*0.5)
 
@@ -105,44 +123,81 @@ train.rows <- sample(rownames(housing.df), nrow(housing.df)*0.5)
 valid.rows <- sample(setdiff(rownames(housing.df), train.rows),
               nrow(housing.df)*0.3)
 
-# assign the remaining 20% row IDs serve as test
-test.rows <- setdiff(rownames(housing.df), union(train.rows, valid.rows))
+# assign the remaining 20% row IDs serve as holdout
+holdout.rows <- setdiff(rownames(housing.df), union(train.rows, valid.rows))
 
 # create the 3 data frames by collecting all columns from the appropriate rows
-train.data <- housing.df[train.rows, ]
-valid.data <- housing.df[valid.rows, ]
-test.data <- housing.df[test.rows, ]
+train.df <- housing.df[train.rows, ]
+valid.df <- housing.df[valid.rows, ]
+holdout.df <- housing.df[holdout.rows, ]
+
+## partitioning into training (60%) and holdout (40%) using caret
+set.seed(1)
+idx <- caret::createDataPartition(housing.df$TOTAL.VALUE, p=0.6, list=FALSE)
+train.df <- housing.df[idx, ]
+holdout.df <- housing.df[-idx, ]
+
+
 
 ## Building a Predictive Model
 ### Modeling Process
 #### Cross-Validation
 
-reg <- lm(TOTAL.VALUE ~ .-TAX, data = housing.df, subset = train.rows) # remove TAX
-tr.res <- data.frame(train.data$TOTAL.VALUE, reg$fitted.values, reg$residuals)
-head(tr.res)
+library(tidyverse)
+library(mlba)
+library(fastDummies)
+
+housing.df <- mlba::WestRoxbury %>%
+  # remove rows with missing values
+  drop_na() %>%
+  # remove column TAX
+  select(-TAX) %>%
+  # make REMODEL a factor and convert to dummy variables
+  mutate(REMODEL=factor(REMODEL)) %>%
+  dummy_cols(select_columns=c('REMODEL'),
+             remove_selected_columns=TRUE, remove_first_dummy=TRUE)
 
 
-pred <- predict(reg, newdata = valid.data)
-vl.res <- data.frame(valid.data$TOTAL.VALUE, pred, residuals =
-          valid.data$TOTAL.VALUE - pred)
-head(vl.res)
+set.seed(1)
+idx <- caret::createDataPartition(housing.df$TOTAL.VALUE, p=0.6, list=FALSE)
+train.df <- housing.df[idx, ]
+holdout.df <- housing.df[-idx, ]
+
+
+reg <- lm(TOTAL.VALUE ~ ., data=train.df)
+train.res <- data.frame(actual=train.df$TOTAL.VALUE, predicted=reg$fitted.values,
+                        residuals=reg$residuals)
+head(train.res)
+
+
+pred <- predict(reg, newdata=holdout.df)
+holdout.res <- data.frame(actual=holdout.df$TOTAL.VALUE, predicted=pred,
+                          residuals=holdout.df$TOTAL.VALUE - pred)
+head(holdout.res)
 
 
 library(caret)
-
 # compute metrics on training set
-RMSE(pred=reg$fitted.values, obs=train.data$TOTAL.VALUE)
-MAE(pred=reg$fitted.values, obs=train.data$TOTAL.VALUE)
+data.frame(
+    ME = round(mean(train.res$residuals), 5),
+    RMSE = RMSE(pred=train.res$predicted, obs=train.res$actual),
+    MAE = MAE(pred=train.res$predicted, obs=train.res$actual)
+)
 
-# compute metrics on prediction set
-pred <- predict(reg, newdata = valid.data)
-RMSE(pred, valid.data$TOTAL.VALUE)
-MAE(pred, valid.data$TOTAL.VALUE)
+# compute metrics on holdout set
+data.frame(
+    ME = round(mean(holdout.res$residuals), 5),
+    RMSE = RMSE(pred=holdout.res$predicted, obs=holdout.res$actual),
+    MAE = MAE(pred=holdout.res$predicted, obs=holdout.res$actual)
+)
 
 
 # For demonstration purposes, we construct the new.data from the original dataset
 housing.df <- mlba::WestRoxbury
-new.data <- housing.df[100:102,-1]
+new.data <- housing.df[100:102, -1] %>%
+  mutate(REMODEL=factor(REMODEL, levels=c("None", "Old", "Recent"))) %>%
+  dummy_cols(select_columns=c('REMODEL'),
+           remove_selected_columns=TRUE, remove_first_dummy=TRUE)
 new.data
 pred <- predict(reg, newdata = new.data)
 pred

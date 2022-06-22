@@ -1,0 +1,185 @@
+---
+title: "Machine Learning for Business Analytics"
+author: "Chapter 22: Responsible Data Science"
+output:
+  pdf_document:
+    toc: no
+    highlight: tango
+#  html_document:
+#    toc: yes
+#    toc_depth: 4
+#    toc_float: yes
+---
+<style>
+h1.title { font-size: 28px; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 14px; }
+h4 { font-size: 12px; }
+</style>
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
+                      collapse=FALSE,    # collapse by default
+                      echo=TRUE,         # echo code by default
+                      comment = "#>",    # change comment character
+                      fig.width = 5.5,     # set figure width
+                      fig.align = "center",# set figure position
+                      out.width = "49%", # set width of displayed images
+                      warning=FALSE,     # do not show R warnings
+                      message=FALSE,     # do not show R messages
+                      row.print=25)
+```
+
+
+```{r}
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+```
+
+# Example: Applying the RDS Framework to the COMPAS Example
+## Data Issues
+```{r}
+library(caret)
+library(tidyverse)
+# load COMPAS data
+compas.df <- mlba::COMPAS_clean %>%
+  select(-id) %>%
+  mutate(
+    age_cat = factor(age_cat, levels=c("Less than 25", "25 - 45", "Greater than 45")),
+    c_charge_degree = factor(c_charge_degree, levels=c("F", "M")),
+    race = factor(race, levels=c("African-American", "Asian", "Caucasian", "Hispanic",
+                                 "Native American", "Other")),
+    sex = factor(sex, levels=c("Female", "Male")),
+    two_year_recid = factor(two_year_recid, levels=c(0, 1), labels=c("No", "Yes"))
+  )
+
+# split dataset and train models
+set.seed(1)
+idx <- createDataPartition(compas.df$two_year_recid, p=0.7, list=FALSE)
+train.df <- compas.df[idx, ]
+valid.df <- compas.df[-idx, ]
+```
+
+```{r}
+trControl <- trainControl(method="cv", number=5, allowParallel=TRUE)
+# logistic regression model
+logreg.model <- train(two_year_recid ~ . - race, data=train.df,
+                      method="glm", family="binomial", trControl=trControl)
+# random forest model
+rf.model <- train(two_year_recid ~ . - race, data=train.df,
+                         method="rf", trControl=trControl)
+
+# extract coefficients and calculate odds shown in table
+logreg.coef <- coef(logreg.model$finalModel)
+data.frame(
+  coefficient=logreg.coef,
+  odds=c(NA, exp(logreg.coef)[-c(1)])
+) %>% round(3)
+```
+
+```{r}
+# calculation of model accuracy based on cross-validation results
+caret::confusionMatrix(logreg.model)
+caret::confusionMatrix(rf.model)
+```
+
+## Auditing the Model
+```{r}
+library(ROCR)
+holdoutMetrics <- function(df, model) {
+  result <- data.frame(obs = df$two_year_recid, pred = predict(model, newdata=df),
+    prob = predict(model, newdata=df, type="prob")$Yes)
+  pred <- prediction(result$prob, result$obs)
+  # compute overall performance
+  perf_AUC <- performance(pred, "auc")
+  AUC <- perf_AUC@y.values[[1]]
+  cm <- confusionMatrix(result$pred, result$obs, positive="Yes")
+  return (tibble(AUC=AUC, Accuracy = cm$overall["Accuracy"],
+    FPR = 100*(1-cm$byClass["Specificity"]),
+    FNR = 100*(1-cm$byClass["Sensitivity"])))
+}
+# compute performance by race
+metricsByRace <- function(model) {
+  metrics <- tibble()
+  for (raceValue in levels(compas.df$race)) {
+    df <- compas.df %>% filter(race==raceValue)
+    metrics <- bind_rows(metrics, tibble(race=raceValue, holdoutMetrics(df, model)))
+  }
+  return (metrics)
+}
+# combine metrics for logistic and random forest
+metrics <- bind_rows(
+  tibble(Model="Random forest", metricsByRace(rf.model)),
+  tibble(Model="Logistic regression", metricsByRace(logreg.model))
+) %>% filter(! race %in% c("Asian", "Native American"))
+```
+
+```{r}
+library(gridExtra)
+makeBarchart <- function(metrics, aesthetics) {
+  g <- ggplot(metrics, aesthetics) +
+    geom_bar(position="dodge", stat="identity") +
+    geom_text(hjust=1.5, position=position_dodge(.9)) +
+    coord_flip() +
+    scale_x_discrete(limits=rev) +
+    labs(x="Race") +
+    theme_bw()
+  return (g)
+}
+g1 <- makeBarchart(metrics, aes(x=race, y=Accuracy, fill=Model, label=round(Accuracy, 3))) +
+  theme(legend.position="none")
+g2 <- makeBarchart(metrics, aes(x=race, y=AUC, fill=Model, label=round(AUC, 3))) +
+  theme(legend.position="bottom")
+grid.arrange(g1, g2, nrow=2, heights=c(6.25, 7))
+
+g <- arrangeGrob(g1, g2, heights=c(6.25, 7))
+ggsave(file=file.path("..", "figures", "chapter_22", "c22_acc_auc.pdf"),
+       g, width=5, height=5, units="in")
+
+g1 <- makeBarchart(metrics, aes(x=race, y=FPR, fill=Model, label=round(FPR, 3))) +
+  theme(legend.position="none")
+g2 <- makeBarchart(metrics, aes(x=race, y=FNR, fill=Model, label=round(FNR, 3))) +
+  theme(legend.position="bottom")
+grid.arrange(g1, g2, heights=c(6.25, 7))
+
+g <- arrangeGrob(g1, g2, heights=c(6.25, 7))
+ggsave(file=file.path("..", "figures", "chapter_22", "c22_fpr_fnr.pdf"),
+    g, width=5, height=5, units="in")
+```
+
+### Interpretability Methods
+```{r}
+library(iml)
+predictor.rf = Predictor$new(rf.model, data=valid.df, y=valid.df$two_year_recid)
+predictor.lm = Predictor$new(logreg.model, data=valid.df, y=valid.df$two_year_recid)
+```
+
+```{r}
+featureEffect.lm = FeatureEffect$new(predictor.lm, feature='priors_count', method='pdp')
+featureEffect.rf = FeatureEffect$new(predictor.rf, feature='priors_count', method='pdp')
+combined <- bind_rows(
+  tibble(Method="Logistic regression", featureEffect.lm$results %>% filter(.class=="Yes")),
+  tibble(Method="Random forest", featureEffect.rf$results %>% filter(.class=="Yes"))
+)
+ggplot(combined, aes(x=priors_count, y=.value, color=Method)) +
+  geom_line() +
+  labs(x="Feature Value", y="Probability of recidivism")
+```
+
+```{r}
+ggsave(file=file.path("..", "figures", "chapter_22", "c22f005.pdf"),
+  last_plot() + theme_bw(), width=5, height=3, units="in")
+```
+
+```{r}
+library(iml)
+predictor.rf = Predictor$new(rf.model, data=valid.df, y=valid.df$two_year_recid)
+predictor.lm = Predictor$new(logreg.model, data=valid.df, y=valid.df$two_year_recid)
+
+# permutation feature importance
+FeatureImp$new(predictor.lm, "ce", compare="ratio", n.repetitions=5)
+FeatureImp$new(predictor.rf, "ce", compare="ratio", n.repetitions=5)
+```
+

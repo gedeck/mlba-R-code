@@ -1,39 +1,149 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 
-# Combining Methods: Ensembles and Uplift Modeling
+# Generating, Comparing, and Combining Multiple Models
 ## Ensembles
 ### Bagging and Boosting in R
 #### Combining Propensities
 
+library(tidyverse)
 library(adabag)
 library(rpart)
 library(caret)
 
-bank.df <- mlba::UniversalBank
-bank.df <- bank.df[ , -c(1, 5)]  # Drop ID and zip code columns.
-
-# transform Personal.Loan into categorical variable
-bank.df$Personal.Loan = as.factor(bank.df$Personal.Loan)
+set.seed(1)
+# load and preprocess the data
+bank.df <- mlba::UniversalBank %>%
+    select(-c(ID, ZIP.Code)) %>%
+    mutate(
+      Personal.Loan = factor(Personal.Loan, levels=c(0, 1), labels=c("No", "Yes"))
+    )
 
 # partition the data
 train.index <- sample(c(1:dim(bank.df)[1]), dim(bank.df)[1]*0.6)
 train.df <- bank.df[train.index, ]
-valid.df <- bank.df[-train.index, ]
+holdout.df <- bank.df[-train.index, ]
 
-# single tree
-tr <- rpart(Personal.Loan ~ ., data = train.df)
-pred <- predict(tr, valid.df, type = "class")
-confusionMatrix(pred, valid.df$Personal.Loan)
+# single tree (rpart)
+tr <- rpart(Personal.Loan ~ ., data=train.df)
 
-# bagging
-bag <- bagging(Personal.Loan ~ ., data = train.df)
-pred <- predict(bag, valid.df, type = "class")
-confusionMatrix(as.factor(pred$class), valid.df$Personal.Loan)
+# bagging and boosting using adabag
+bag <- bagging(Personal.Loan ~ ., data=train.df)
+boost <- boosting(Personal.Loan ~ ., data=train.df)
 
-# boosting
-boost <- boosting(Personal.Loan ~ ., data = train.df)
-pred <- predict(boost, valid.df, type = "class")
-confusionMatrix(as.factor(pred$class), valid.df$Personal.Loan)
+# bagging and boosting using randomForest and xgboost with parameter tuning
+bag.rf <- train(Personal.Loan ~ ., data=train.df, method="rf")
+boost.xgb <- train(Personal.Loan ~ ., data=train.df, method="xgbTree", verbosity=0)
+
+
+library(ROCR)
+rocCurveData <- function(prob, data) {
+  predob <- prediction(prob, data$Personal.Loan)
+  perf <- performance(predob, "tpr", "fpr")
+  return (data.frame(tpr=perf@x.values[[1]], fpr=perf@y.values[[1]]))
+}
+performance.df <- rbind(
+  cbind(rocCurveData(predict(tr, holdout.df, type="prob")[,"Yes"], holdout.df), model="Single tree"),
+  cbind(rocCurveData(predict(bag, holdout.df)$prob[, 2], holdout.df), model="Bagging"),
+  cbind(rocCurveData(predict(boost, holdout.df)$prob[, 2], holdout.df), model="Boosting")
+)
+colors <- c("Single tree"="grey", "Bagging"="blue", "Boosting"="tomato")
+g1 <- ggplot(performance.df, aes(x=tpr, y=fpr, color=model)) +
+  geom_line() +
+  scale_color_manual(values=colors) +
+  geom_segment(aes(x=0, y=0, xend=1, yend=1), color="grey", linetype="dashed") +
+  labs(x="1 - Specificity", y="Sensitivity", color="Model")
+g1
+
+performance.df <- rbind(
+  cbind(rocCurveData(predict(tr, holdout.df, type="prob")[,"Yes"], holdout.df),
+        model="Single tree"),
+  cbind(rocCurveData(predict(bag.rf, holdout.df, type="prob")[,"Yes"], holdout.df),
+        model="Random Forest"),
+  cbind(rocCurveData(predict(boost.xgb, holdout.df, type="prob")[,"Yes"], holdout.df),
+        model="xgboost")
+)
+colors <- c("Single tree"="grey", "Random Forest"="blue", "xgboost"="tomato")
+g2 <- ggplot(performance.df, aes(x=tpr, y=fpr, color=model)) +
+  geom_line() +
+  scale_color_manual(values=colors) +
+  geom_segment(aes(x=0, y=0, xend=1, yend=1), color="grey", linetype="dashed") +
+  labs(x="1 - Specificity", y="Sensitivity", color="Model")
+g2
+library(gridExtra)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2, widths=c(0.49, 0.51))
+ggsave(file=file.path("..", "figures", "chapter_13", "bagging-boosting.pdf"),
+       g, width=8, height=3, units="in")
+
+## Automated Machine Learning (AutoML)
+### AutoML: Explore and Clean Data
+
+library(tidyverse)
+
+# load and preprocess the data
+bank.df <- mlba::UniversalBank %>%
+  # Drop ID and zip code columns.
+  select(-c(ID, ZIP.Code)) %>%
+  # convert Personal.Loan to a factor with labels Yes and No
+  mutate(Personal.Loan = factor(Personal.Loan, levels=c(0, 1), labels=c("No", "Yes")))
+
+# partition the data
+set.seed(1)
+idx <- caret::createDataPartition(bank.df$Personal.Loan, p=0.6, list=FALSE)
+train.df <- bank.df[idx, ]
+holdout.df <- bank.df[-idx, ]
+
+
+library(h2o)
+
+# Start the H2O cluster (locally)
+h2o.init()
+
+train.h2o <- as.h2o(train.df)
+holdout.h2o <- as.h2o(holdout.df)
+
+
+
+### AutoML: Choose Features and Machine Learning Methods
+
+# identify outcome and predictors
+y <- "Personal.Loan"
+x <- setdiff(names(train.df), y)
+
+# run AutoML for 20 base models
+aml <- h2o.automl(x=x, y=y, training_frame=train.h2o,
+                  max_models=20, exclude_algos=c("DeepLearning"),
+                  seed=1)
+aml.balanced <- h2o.automl(x=x, y=y, training_frame=train.h2o,
+                  max_models=20, exclude_algos=c("DeepLearning"),
+                  balance_classes=TRUE,
+                  seed=1)
+
+aml
+
+
+aml.balanced
+
+### AutoML: Evaluate Model Performance
+
+h2o.confusionMatrix(aml@leader, holdout.h2o)
+h2o.confusionMatrix(aml.balanced@leader, holdout.h2o)
+
+## Explaining Model Predictions
+### Explaining Model Predictions: LIME
+
+cases <- c('3055', '3358', # predicted Yes
+           '2', '1178')    # predicted No
+explainer <- lime::lime(train.df, aml@leader, bin_continuous=TRUE, quantile_bins=FALSE)
+explanations <- lime::explain(holdout.df[cases,], explainer, n_labels=1, n_features=8)
+
+lime::plot_features(explanations, ncol=2)
+
+
+pdf(file=file.path("..", "figures", "chapter_13", "lime-analysis.pdf"),
+    width=7, height=6)
+    lime::plot_features(explanations, ncol=2)
+dev.off()

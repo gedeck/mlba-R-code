@@ -1,7 +1,8 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 
 # Data Visualization
 ## Data Examples
@@ -10,7 +11,7 @@ install_github("gedeck/mlba/mlba", force=TRUE)
 housing.df <- mlba::BostonHousing
 head(housing.df, 9)
 
-## Basic Charts: Bar Charts, Line changed
+## Basic Charts: Bar Charts, Line 
 ### Example 2: Ridership on Amtrak Trains
 
 # Amtrak data
@@ -208,7 +209,7 @@ g1 <- ggplot(housing.df, aes(x=LSTAT, y=NOX, color=factor(CAT.MEDV))) +
   labs(color="CAT.MEDV") + geom_point(alpha=0.6)
 
 g2 <- ggplot(data.for.plot) +
-  geom_bar(aes(x=factor(RAD), y=meanMEDV, fill=factor(RAD)), stat="identity") +
+  geom_bar(aes(x=factor(RAD), y=meanMEDV), stat="identity") +
   labs(x="RAD", y="Avg. MEDV") +
   facet_grid(CHAS ~ .)
 
@@ -303,7 +304,8 @@ plot(annual.ridership.ts, xlab="Year", ylab="Average Ridership",
 g1 <- autoplot(ridership.ts) + ylim(1300, 2300) +
   labs(x="Year", y="Ridership (in 000s)") +
   geom_smooth(formula=y ~ poly(x, 2), method="lm",
-              colour="navy", se=FALSE, na.rm=TRUE)
+              colour="navy", se=FALSE, na.rm=TRUE) +
+  scale_x_continuous(n.breaks=10)
 
 ## zoom in, monthly, and annual plots
 g2 <- autoplot(window(ridership.ts, start=c(1991,1), end=c(1992,12))) +
@@ -453,7 +455,7 @@ ggplot(data, aes(area=High.Bid, subgroup=Category, fill=-negative.feedback,
                                min.size=5, size=12) +
     geom_treemap_text(fontface="italic", colour="black", place="centre",
                       min.size=5, size=8) +
-    scale_fill_gradient(low="#0396CC", high='#ABDCFF')
+    scale_fill_gradient(low="#0396CC", high="#ABDCFF")
 
 
 g <- last_plot() + theme_blank(legend.position="none")
@@ -478,7 +480,7 @@ ggsave(file=file.path("..", "figures", "chapter_03", "Viz-GoogleMapScom.pdf"),
 
 library(mosaic)
 
-gdp.df <- mlba::gdp
+gdp.df <- mlba::GDP
 names(gdp.df)[5] <- "GDP2015"
 happiness.df <- mlba::Veerhoven
 

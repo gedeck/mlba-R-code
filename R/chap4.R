@@ -1,8 +1,11 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+
 options(dplyr.summarise.inform = FALSE)
+library(tidyverse)
 
 # Dimension Reduction
 ## Data Summaries
@@ -33,6 +36,8 @@ data.frame(mean=sapply(boston.housing.df, mean),
            length=sapply(boston.housing.df, length),
            miss.val=sapply(boston.housing.df,
                            function(x) sum(length(which(is.na(x))))))
+
+
 
 ### Summary Statistics
 
@@ -95,10 +100,10 @@ barplot(prop.tbl, xlab="ZN", ylab="", yaxt="n",main="Distribution of CAT.MEDV by
 axis(2, at=(seq(0,1, 0.2)), paste(seq(0,100,20), "%"))
 
 library(tidyverse)
-df <- data.frame(prop.tbl) %>% pivot_wider()
+df <- data.frame(prop.tbl)
 ggplot(df, aes(x=Var2, y=Freq, group=Var1, fill=Var1)) +
-  geom_bar(stat='identity', color='grey', width=1) +
-  scale_y_continuous(labels = scales::percent, expand=expand_scale()) +
+  geom_bar(stat="identity", color="grey", width=1) +
+  scale_y_continuous(labels = scales::percent, expand=expansion()) +
   scale_fill_manual("CAT.MEDV", values=c("0"="#eeeeee", "1"="darkgrey")) +
   labs(x="ZN", y="", title="Distribution of CAT.MEDV by ZN")
 
@@ -137,8 +142,8 @@ getPCaxis <- function(f, pcs, pcLabel) {
           pcs$center - f * pcs$rotation[, pcLabel]))
   )
 }
-PC1 <- getPCaxis(90, pcs, 'PC1')
-PC2 <- getPCaxis(50, pcs, 'PC2')
+PC1 <- getPCaxis(90, pcs, "PC1")
+PC2 <- getPCaxis(50, pcs, "PC2")
 ggplot(cereals.df, aes(x=calories, y=rating)) +
   geom_point() +
   geom_line(data=PC1) +

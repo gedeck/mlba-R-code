@@ -31,27 +31,169 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 ```
 
 
-# Uplift (Persuasion) Modeling
-## Computing Uplift with Python
 ```{r}
-library(uplift)
-voter.df <- mlba::VoterPersuasion
-# transform variable MOVED_AD to numerical
-voter.df$MOVED_AD_NUM <- ifelse(voter.df$MOVED_AD == "Y", 1, 0)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+```
+
+# A/B Testing
+## The statistical test for comparing two groups (T-test)
+```{r}
+pt(q=2.828, df=1998, lower.tail=FALSE)
+pt(q=2.626, df=1998, lower.tail=FALSE)
+```
+
+# Uplift (Persuasion) Modeling
+## Computing Uplift with R
+```{r}
+library(tidyverse)
+# load and preprocess the data
+predictors <- c("AGE", "NH_WHITE", "COMM_PT", "H_F1", "REG_DAYS",
+                "PR_PELIG", "E_PELIG", "POLITICALC", "MESSAGE_A")
+outcome <- "MOVED_AD"
+voter.df <- mlba::VoterPersuasion %>%
+  select(all_of(c(predictors, outcome)))
+
 
 set.seed(1)
-train.index <- sample(c(1:dim(voter.df)[1]), dim(voter.df)[1]*0.6)
+nrows <- dim(voter.df)[1]
+train.index <- sample(1:nrows, nrows * 0.6)
 train.df <- voter.df[train.index, ]
-valid.df <- voter.df[-train.index, ]
+holdout.df <- voter.df[-train.index, ]
 
-# use upliftRF to apply a Random Forest (alternatively use upliftKNN() to apply kNN).
-up.fit <- upliftRF(MOVED_AD_NUM ~ AGE + NH_WHITE + COMM_PT + H_F1 + REG_DAYS+
-                   PR_PELIG + E_PELIG + POLITICALC  + trt(MESSAGE_A),
-                 data = train.df, mtry = 3, ntree = 100, split_method = "KL",
-                 minsplit = 200, verbose = TRUE)
-pred <- predict(up.fit, newdata = valid.df)
-# first column: p(y | treatment)
-# second column: p(y | control)
-head(data.frame(pred, "uplift" = pred[,1] - pred[,2]))
+# build a random forest model using caret
+train_control <- caret::trainControl(method="none")
+model <- caret::train(MOVED_AD ~ ., data=train.df,
+                      trControl=train_control,
+                      method="rf")
+
+# calculating the uplift
+uplift_df <- data.frame(holdout.df)
+uplift_df$MESSAGE_A <- 1
+predTreatment <- predict(model, newdata=uplift_df, type="prob")
+uplift_df$MESSAGE_A <- 0
+predControl <- predict(model, newdata=uplift_df, type="prob")
+upliftResult <- data.frame(
+  probMessage = predTreatment[, 1],
+  probNoMessage = predControl[, 1]
+)
+upliftResult$uplift <- upliftResult$probMessage - upliftResult$probNoMessage
+head(upliftResult)
+```
+
+```{r}
+
+```
+
+# Reinforcement Learning
+## Example of using a Contextual Multi-Arm Bandit for Movie Recommendations
+```{r}
+library(tidyverse)
+library(mlba)
+library(contextual)
+library(data.table)
+library(splitstackshape)
+
+# preprocess movies data to create indicator variables for the different genres
+movies_dat <- as.data.table(mlba::MovieLensMovies)
+movies_dat <- splitstackshape::cSplit_e(movies_dat, "genres", sep="|", type="character",
+                                        fill=0, drop=TRUE)
+movies_dat[[3]] <- NULL  # deletes the third column
+
+ratings_dat <- as.data.table(mlba::MovieLensRatings)
+all_movies <- ratings_dat[movies_dat, on=c(movieId="movieId")]
+all_movies <- na.omit(all_movies, cols=c("movieId", "userId"))
+# renumber userId to sequential numbers starting at 1
+all_movies[, userId := as.numeric(as.factor(userId))]
+
+# find the top-50 most frequently rated movies
+top_50 <- all_movies %>%
+  count(movieId) %>%
+  slice_max(n, n=50) %>%
+  pull(movieId)
+top_50_movies   <- all_movies[movieId %in% top_50]
+# renumber movieId to sequential numbers starting at 1
+top_50_movies[, movieId   := as.numeric(as.factor(movieId))]
+
+# create profile of genres for each movie in the top-50 (arm_features)
+arm_features <- top_50_movies %>%
+  select(-c(userId, rating, timestamp, title)) %>%
+  # select one row for each movieId
+  group_by(movieId) %>% slice(1) %>% ungroup()
+
+# for each user, create their profile of genre preferences based on
+# their viewed movies that are not in the top-50 (user_features)
+user_features <- all_movies %>%
+  filter(! movieId %in% top_50) %>%   # restrict to movies not in the top-50
+  select(-c(movieId, rating, timestamp, title)) %>%
+  # for each user, sum
+  group_by(userId) %>%
+  summarise_all(sum) %>%
+  # normalize user profile
+  group_by(userId) %>%
+  mutate(
+    total = sum(c_across(genres_Action:genres_Western)),
+    across(genres_Action:genres_Western, ~ ./total)
+  ) %>%
+  select(-c(total)) %>%
+  as.data.table()
+
+
+# add users who only rated top-50 movies
+# their genre preference profile is set to 0 for all genres
+all_users <- as.data.table(unique(all_movies$userId))
+user_features <- user_features[all_users, on=c(userId="V1")]
+user_features[is.na(user_features)] <- 0
+setorder(user_features, userId)
+```
+
+```{r}
+
+```
+
+```{r}
+# prepare the data for use with the contextual package
+top_50_movies[, t := .I]
+top_50_movies[, sim := 1]
+top_50_movies[, agent := "Offline"]
+top_50_movies[, choice := movieId]
+top_50_movies[, reward := ifelse(rating <= 4, 0, 1)]
+setorder(top_50_movies,timestamp, title)
+
+# the bandit samples users with their genre preferences (user_features),
+# movie choices (choice), and ratings.
+# each movie is characterized by the genre profile (arm_features)
+# these data are used to train the agent
+environment <- OfflineLookupReplayEvaluatorBandit$new(
+    top_50_movies,
+    k = 50,
+    unique_col = "userId",
+    unique_lookup = user_features,
+    shared_lookup = arm_features)
+
+# define list of strategies to evaluate
+agents <-list(
+    Agent$new(RandomPolicy$new(), environment, "Random"),
+    Agent$new(LinUCBDisjointOptimizedPolicy$new(2.1), environment, "LinUCB Dis"))
+
+# setup and run simulation
+simulation  <- Simulator$new(
+    agents = agents,
+    simulations = 20,
+    horizon = 10000L,
+    save_interval = 1)
+results  <- simulation$run()
+
+plot(results, type="cumulative", regret=FALSE, rate=TRUE,
+     legend_position="topleft", disp="sd")
+```
+
+```{r}
+pdf(file=file.path("..", "figures", "chapter_14", "mab-movielens.pdf"), width=6, height=4)
+  plot(results, type="cumulative", regret=FALSE, rate=TRUE,
+     legend_position="topleft", disp="sd")
+dev.off()
 ```
 

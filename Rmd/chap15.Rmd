@@ -32,14 +32,15 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 ```
 
 # Association Rules
 ## The Process of Rule Selection
-### Lift Ratio
+### Lift
 ```{r}
 library(arules)
 fp.df <- mlba::Faceplate
@@ -66,7 +67,7 @@ all.books.df <- mlba::CharlesBookClub
 
 # create a binary incidence matrix
 count.books.df <- all.books.df[, 8:18]
-incid.books.mat <= as.matrix(count.books.df > 0)
+incid.books.mat <- as.matrix(count.books.df > 0)
 
 #  convert the binary incidence matrix into a transactions database
 books.trans <- as(incid.books.mat, "transactions")
@@ -84,28 +85,33 @@ inspect(head(sort(rules, by = "lift"), n=30))
 ```
 
 # Collaborative Filtering
-## 
+## Example 4: Predicting Movie Ratings with MovieLens Data
 ```{r}
 library(recommenderlab)
 
 # download MovieLens data
-data <- mlba::getMovieLens()
+ratings <- mlba::MovieLensRatings
+movies <- mlba::MovieLensMovies
 
 # convert ratings to rating matrix
-idxUserId <- sort(unique(data$ratings$userId))
-idxMovieId <- sort(unique(data$ratings$movieId))
+idxUserId <- sort(unique(ratings$userId))
+idxMovieId <- sort(unique(ratings$movieId))
 m <- matrix(NA, nrow=length(idxUserId), ncol=length(idxMovieId),
             dimnames=list(
               user=paste("u", 1:length(idxUserId), sep=''),
-              item=data$movies$title[match(idxMovieId, data$movies$movieId)]
+              item=movies$title[match(idxMovieId, movies$movieId)]
             ))
-for (i in 1:nrow(data$ratings)) {
-  rating <- data$ratings[i,]
+for (i in 1:nrow(ratings)) {
+  rating <- ratings[i,]
   irow <- match(rating$userId, idxUserId)
   icol <- match(rating$movieId, idxMovieId)
   m[irow, icol] <- rating$rating
 }
 ratingMatrix <- as(m, "realRatingMatrix")
+```
+
+```{r}
+
 ```
 
 ```{r}

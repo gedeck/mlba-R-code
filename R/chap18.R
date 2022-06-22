@@ -1,92 +1,154 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
+options(scipen=999)
 
 # Regression-Based Forecasting
 ## A Model with Trend
 ### Linear Trend
 
 library(forecast)
+library(ggplot2)
 Amtrak.data <- mlba::Amtrak
 
 # create time series
-ridership.ts <- ts(Amtrak.data$Ridership, start = c(1991,1),
-                   end = c(2004,3), freq = 12)
+ridership.ts <- ts(Amtrak.data$Ridership,
+                   start=c(1991, 1), end=c(2004, 3), freq=12)
 
 # produce linear trend model
 ridership.lm <- tslm(ridership.ts ~ trend)
 
-# plot the series
-plot(ridership.ts, xlab = "Time", ylab = "Ridership", ylim = c(1300,2300), bty = "l")
-lines(ridership.lm$fitted, lwd = 2)
+# plot the series using the autoplot function to make use of ggplot
+autoplot(ridership.ts, xlab="Time", ylab="Ridership (in 000s)", color="steelblue") +
+  autolayer(ridership.lm$fitted.values, color="tomato", size=0.75) +
+  scale_y_continuous(limits=c(1300, 2300))
 
 
-nValid <- 36
-nTrain <- length(ridership.ts) - nValid
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakLinear.pdf"),
+         last_plot() + scale_x_continuous(n.breaks=10) + theme_bw(),
+         width=6, height=3, units="in")
+
+
+nTest <- 36
+nTrain <- length(ridership.ts) - nTest
 
 # partition the data
-train.ts <- window(ridership.ts, start = c(1991, 1), end = c(1991, nTrain))
-valid.ts <- window(ridership.ts, start = c(1991, nTrain + 1),
-                                 end = c(1991, nTrain + nValid))
+train.ts <- window(ridership.ts, start=c(1991, 1), end=c(1991, nTrain))
+test.ts <- window(ridership.ts, start=c(1991, nTrain + 1),
+                                   end=c(1991, nTrain + nTest))
 
 
-# fit linear trend model to training set and create forecasts
+# fit linear trend model to training set
 train.lm <- tslm(train.ts ~ trend)
-train.lm.pred <- forecast(train.lm, h = nValid, level = 0)
+train.lm.pred <- forecast(train.lm, h=length(test.ts), level=0)
 
-par(mfrow = c(2, 1))
-plot(train.lm.pred, ylim = c(1300, 2600),  ylab = "Ridership", xlab = "Time",
-     bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "", flty = 2)
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(train.lm.pred$fitted, lwd = 2, col = "blue")
-lines(valid.ts)
-plot(train.lm.pred$residuals, ylim = c(-420, 500),  ylab = "Forecast Errors",
-    xlab = "Time", bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "")
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(valid.ts - train.lm.pred$mean, lwd = 1)
+# define functions to create consistent plots of models
+library(gridExtra)
+colData <- "steelblue"; colModel <- "tomato"
+plotForecast <- function(model, train.ts, test.ts) {
+  model.pred <- forecast(model, h=length(test.ts), level=0)
+  g <- autoplot(train.ts, xlab="Time", ylab="Ridership (in 000s)", color=colData) +
+    autolayer(test.ts, color=colData) +
+    autolayer(model$fitted.values, color=colModel, size=0.75) +
+    autolayer(model.pred$mean, color=colModel, size=0.75)
+  return (g)
+}
+plotResiduals <- function(model, test.ts) {
+  model.pred <- forecast(model, h=length(test.ts), level=0)
+  g <- autoplot(model$residuals, xlab="Time", ylab="Forecast Errors", color=colModel, size=0.75) +
+    autolayer(test.ts - model.pred$mean, color=colModel, size=0.75) +
+    geom_hline(yintercept=0, color="darkgrey") +
+    coord_cartesian(ylim=c(-410, 410))
+  return (g)
+}
+g1 <- plotForecast(train.lm, train.ts, test.ts)
+g2 <- plotResiduals(train.lm, test.ts)
+grid.arrange(g1, g2, nrow=2)
+
+
+  addTrainValid <- function(g, train.ts, test.ts, yh) {
+    delta <- 1/12
+    date_t <- time(train.ts)[1]
+    date_th <- time(test.ts)[1] - delta
+    date_hf <- tail(time(test.ts), 1) + delta
+    g <- g + geom_vline(xintercept=date_th, color="darkgrey") +
+      geom_segment(aes(x=date_t, xend=date_th-delta, y=yh, yend=yh), color="darkgrey") +
+      geom_segment(aes(x=date_th+delta, xend=date_hf-delta, y=yh, yend=yh), color="darkgrey")  +
+      geom_text(aes(x=(date_t+date_th)/2, y=yh+50, label='Training')) +
+      geom_text(aes(x=(date_th+date_hf)/2, y=yh+50, label='Test'))
+    g <- g + scale_x_continuous(n.breaks=10)
+    return (g)
+  }
+  g1 <- addTrainValid(g1, train.ts, test.ts, 2300)
+  g2 <- addTrainValid(g2, train.ts, test.ts, 500)# + coord_cartesian(ylim=c(-410, 550))
+  gridExtra::grid.arrange(g1, g2, nrow=2)
+
+  g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakLinearPred.pdf"),
+         g, width=6, height=6, units="in")
 
 
 summary(train.lm)
+accuracy(train.lm.pred, test.ts)
 
 ### Exponential Trend
 
 # fit exponential trend using tslm() with argument lambda = 0
-train.lm.expo.trend <- tslm(train.ts ~ trend, lambda = 0)
-train.lm.expo.trend.pred <- forecast(train.lm.expo.trend, h = nValid, level = 0)
+train.lm.expo.trend <- tslm(train.ts ~ trend, lambda=0)
+train.lm.expo.trend.pred <- forecast(train.lm.expo.trend, h=nTest, level=0)
 
 # fit linear trend using tslm() with argument lambda = 1 (no transform of y)
-train.lm.linear.trend <- tslm(train.ts ~ trend, lambda = 1)
-train.lm.linear.trend.pred <- forecast(train.lm.linear.trend, h = nValid, level = 0)
+train.lm.linear.trend <- tslm(train.ts ~ trend, lambda=1)
+train.lm.linear.trend.pred <- forecast(train.lm.linear.trend, h=nTest, level=0)
 
-plot(train.lm.expo.trend.pred, ylim = c(1300, 2600),  ylab = "Ridership",
- xlab = "Time", bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "", flty = 2)
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(train.lm.expo.trend.pred$fitted, lwd = 2, col = "blue")  # Added in 6-5
-lines(train.lm.linear.trend.pred$fitted, lwd = 2, col = "black", lty = 3)
-lines(train.lm.linear.trend.pred$mean, lwd = 2, col = "black", lty = 3)
-lines(valid.ts)
+plotForecast(train.lm.expo.trend, train.ts, test.ts) +
+  autolayer(train.lm.linear.trend$fitted.values, color="forestgreen", size=0.75) +
+  autolayer(train.lm.linear.trend.pred, color="forestgreen", size=0.75)
+
+
+  g <- addTrainValid(last_plot(), train.ts, test.ts, 2300) + theme_bw()
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakExpoPred.pdf"),
+         g, width=6, height=3, units="in")
 
 ### Polynomial Trend
 
 # fit quadratic trend using function I(), which treats an object "as is".
-train.lm.poly.trend <- tslm(train.ts ~ trend + I(trend^2))
-summary(train.lm.poly.trend)
-train.lm.poly.trend.pred <- forecast(train.lm.poly.trend, h = nValid, level = 0)
+train.lm.poly <- tslm(train.ts ~ trend + I(trend^2))
+summary(train.lm.poly)
 
-par(mfrow = c(2,1))
-plot(train.lm.poly.trend.pred, ylim = c(1300, 2600),  ylab = "Ridership",
- xlab = "Time", bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "", flty = 2)
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(train.lm.poly.trend$fitted, lwd = 2)
-lines(valid.ts)
+g1 <- plotForecast(train.lm.poly, train.ts, test.ts)
+g2 <- plotResiduals(train.lm.poly, test.ts)
+grid.arrange(g1, g2, nrow=2)
 
-plot(train.lm.poly.trend$residuals, ylim = c(-400, 550),  ylab = "Forecast Errors",
- xlab = "Time", bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "")
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(valid.ts - train.lm.poly.trend.pred$mean, lwd = 1)
+
+  g1 <- addTrainValid(g1, train.ts, test.ts, 2300)
+  g2 <- addTrainValid(g2, train.ts, test.ts, 500)# + coord_cartesian(ylim=c(-410, 550))
+  grid.arrange(g1, g2, nrow=2)
+
+  g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakPolyPred.pdf"),
+         g, width=6, height=6, units="in")
 
 ## A Model with Seasonality
+
+# fit season model
+train.lm.season <- tslm(train.ts ~ season)
+
+g1 <- plotForecast(train.lm.season, train.ts, test.ts)
+g2 <- plotResiduals(train.lm.season, test.ts)
+grid.arrange(g1, g2, nrow=2)
+
+g1 <- addTrainValid(g1, train.ts, test.ts, 2300)
+g2 <- addTrainValid(g2, train.ts, test.ts, 500)
+grid.arrange(g1, g2, nrow=2)
+
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakSeason.pdf"),
+       g, width=6, height=6, units="in")
+
+### Additive vs.~Multiplicative Seasonality
 
 train.lm.season <- tslm(train.ts ~ season)
 summary(train.lm.season)
@@ -94,13 +156,37 @@ summary(train.lm.season)
 ## A Model with Trend and Seasonality
 
 train.lm.trend.season <- tslm(train.ts ~ trend + I(trend^2) + season)
+g1 <- plotForecast(train.lm.trend.season, train.ts, test.ts)
+g2 <- plotResiduals(train.lm.trend.season, test.ts)
+grid.arrange(g1, g2, nrow=2)
+
+g1 <- addTrainValid(g1, train.ts, test.ts, 2300)
+g2 <- addTrainValid(g2, train.ts, test.ts, 500)
+grid.arrange(g1, g2, nrow=2)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakTrendSeason.pdf"),
+       g, width=6, height=6, units="in")
+
+
 summary(train.lm.trend.season)
 
 ## Autocorrelation and ARIMA Models
 ### Computing Autocorrelation
 
-ridership.24.ts <- window(train.ts, start = c(1991, 1), end = c(1991, 24))
-Acf(ridership.24.ts, lag.max = 12, main = "")
+ridership.24.ts <- window(train.ts, start=c(1991, 1), end=c(1991, 24))
+Acf(ridership.24.ts, lag.max=12, main="")
+
+
+  # ggplot version of graph
+  ggAcf(ridership.24.ts, lag.max=12, main="")
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakACF.pdf"),
+         last_plot() + theme_bw(), width=6, height=3, units="in")
+
+
+  # ggplot version of graph
+  ggAcf(train.lm.trend.season$residuals, lag.max=12, main="")
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakResACF.pdf"),
+         last_plot() + theme_bw(), width=6, height=3, units="in")
 
 ### Improving Forecasts by Integrating Autocorrelation Information
 
@@ -111,21 +197,163 @@ train.lm.trend.season <- tslm(train.ts ~ trend + I(trend^2) + season)
 # use Arima() in the forecast package to fit an ARIMA model
 # (that includes AR models); order = c(1,0,0) gives an AR(1).
 train.res.arima <- Arima(train.lm.trend.season$residuals, order = c(1,0,0))
-valid.res.arima.pred <- forecast(train.res.arima, h = 1)
+test.res.arima.pred <- forecast(train.res.arima, h = 1)
 
 
 summary(train.res.arima)
-valid.res.arima.pred
+test.res.arima.pred
 
 
-plot(train.lm.trend.season$residuals, ylim = c(-250, 250),  ylab = "Residuals",
-    xlab = "Time", bty = "l", xaxt = "n", xlim = c(1991,2006.25), main = "")
-axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
-lines(valid.res.arima.pred$fitted, lwd = 2, col = "blue")
+autoplot(train.lm.trend.season$residuals, xlab="Time", ylab="Residuals", color=colData) +
+  autolayer(test.res.arima.pred$fitted, color=colModel, size=0.75)
+
+
+  g <- addTrainValid(last_plot(), train.ts, test.ts, 200) + theme_bw()
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakResARIMA.pdf"),
+         g, width=6, height=3, units="in")
+
+  g <- ggAcf(train.res.arima$residuals, lag.max=12, main="")
+  ggsave(file=file.path("..", "figures", "chapter_18", "AmtrakResARIMAResACF.pdf"),
+         g + theme_bw(), width=6, height=3, units="in")
 
 ### Evaluating Predictability
+
+  sp500.df <- mlba::SP500
+  sp500.ts <- ts(sp500.df$Close, start = c(1995, 5), end = c(2003, 8), freq = 12)
+  g <- autoplot(sp500.ts, xlab="Time", ylab="Closing price") + theme_bw()
+  ggsave(file=file.path("..", "figures", "chapter_18", "SP500.pdf"),
+         g, width=6, height=3, units="in")
+
+
+sp500.df <- mlba::SP500
+sp500.ts <- ts(sp500.df$Close, start = c(1995, 5), end = c(2003, 8), freq = 12)
+delta <- sp500.ts[2:length(sp500.ts)] - sp500.ts[1:length(sp500.ts)-1]
+ggAcf(delta, lag.max=12, main="")
+
+
+  g <- last_plot() + theme_bw()
+  ggsave(file=file.path("..", "figures", "chapter_18", "SP500Diff1-ACF.pdf"),
+         g, width=6, height=3, units="in")
+
 
 sp500.df <- mlba::SP500
 sp500.ts <- ts(sp500.df$Close, start = c(1995, 5), end = c(2003, 8), freq = 12)
 sp500.arima <- Arima(sp500.ts, order = c(1,0,0))
 sp500.arima
+
+
+library(zoo)
+airTravel.ts <- ts(mlba::Sept11Travel$Air.RPM..000s., start = c(1990, 1), freq = 12)
+airTravel.ts <- window(airTravel.ts, start=c(1990, 1), end=c(2001, 8))
+g <- autoplot((airTravel.ts - decompose(airTravel.ts)$seasonal) / 1000000,
+               xlab="Month",
+               ylab="Seasonally adjusted Air Revenue\n Passenger Miles ($billions)") +
+  scale_x_yearmon() +
+  ylim(0, 63) +
+  theme_bw()
+g
+ggsave(file=file.path("..", "figures", "chapter_18", "seasonalPreSept11air.pdf"),
+       g, width=6, height=3)
+
+
+toys.ts <- ts(mlba::ToysRUsRevenues$Revenue.in.million..., start=c(1992, 1), freq=4)
+autoplot(toys.ts, x="Time", y="Revenue ($ millions)")
+g <- last_plot() + theme_bw()
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-ToysRUs.pdf"),
+       last_plot() + theme_bw(), width=5, height=4, units="in")
+
+
+n <- length(toys.ts)
+train.ts <- window(toys.ts, end=c(1992, n - 2))
+test.ts <- window(toys.ts, start=c(1992, n - 1))
+summary(tslm(train.ts ~ trend + season))
+
+
+walmart <- mlba::WalMartStock
+# use zoo to handle the gaps in the dates
+walmart.zoo <- zoo(walmart$Close, as.Date(walmart$Date, "%d-%b-%y"))
+autoplot(walmart.zoo) +
+  labs(xlab="Time", ylab="Close Price ($)")
+g <- last_plot() + theme_bw()
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Walmart.pdf"),
+       last_plot() + theme_bw(), width=5, height=4, units="in")
+
+
+g1 <- ggAcf(walmart$Close, lag.max=12, ylab="Close ACF", main="")
+delta <- walmart$Close[2:length(walmart$Close)] - walmart$Close[1:length(walmart$Close)-1]
+g2 <- ggAcf(delta, lag.max=12, ylab="Close differences ACF", main="")
+grid.arrange(g1, g2, nrow=2)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Walmart-acf.pdf"),
+       g, width=5, height=5, units="in")
+
+
+sales.ts <- ts(mlba::DepartmentStoreSales$Sales, freq=4)
+autoplot(sales.ts, xlab="Year-Quarter", ylab="Sales") +
+  geom_point() +
+  scale_x_yearqtr(format = "Y%Y-Q%q")
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-DeptStore.pdf"),
+       last_plot() + theme_bw(), width=6, height=3, units="in")
+
+
+train.ts <- window(sales.ts, end=c(1, 20))
+test.ts <- window(sales.ts, start=c(1, 21))
+model <- tslm(train.ts ~ trend + season, lambda=0)
+summary(model)
+
+
+g1 <- autoplot(train.ts, xlab="Year", ylab="Sales") +
+  geom_point() +
+  autolayer(model$fitted.values, color=colModel)
+g2 <- autoplot(model$residuals, xlab="Year", ylab="Residuals")
+grid.arrange(g1, g2, nrow=2)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-DeptStore-model.pdf"),
+       g, width=5, height=5, units="in")
+
+
+sales.df <- mlba::SouvenirSales
+sales.ts <- ts(sales.df$Sales, start=c(1995, 1), end=c(2001, 12), freq=12)
+
+g1 <- autoplot(sales.ts, xlab="Time", ylab="Sales (Australian $)") +
+  geom_point(size=0.5)
+g2 <- g1 + scale_y_log10()
+grid.arrange(g1, g2, ncol=2)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2)
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-SouvenirShop.pdf"),
+       g, width=8, height=4, units="in")
+
+
+shipments.df <- mlba::ApplianceShipments
+shipments.ts <- ts(shipments.df$Shipments, start=c(1985, 1), freq=4)
+
+autoplot(shipments.ts, xlab="Time", ylab="Shipments (in $000s)") +
+  geom_point(size=0.5)
+g <- last_plot() + theme_bw()
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Appliances.pdf"),
+       g, width=5, height=2.5, units="in")
+
+
+wines <- mlba::AustralianWines
+wines.ts <- ts(wines, start=c(1980, 1), freq=12)
+
+g1 <- autoplot(wines.ts[, "sweet.white"], main="Sweet Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+g2 <- autoplot(wines.ts[, "rose"], main="Rose Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+g3 <- autoplot(wines.ts[, "sparkling"], main="Sparkling Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+g4 <- autoplot(wines.ts[, "red"], main="Red Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+g5 <- autoplot(wines.ts[, "dry.white"], main="Dry White Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+g6 <- autoplot(wines.ts[, "fortified"], main="Fortified Wine Sales",
+               xlab="Year", ylab="Thousands of liters")
+
+grid.arrange(g1, g2, g3, g4, g5, g6, ncol=2, nrow=3)
+g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(),
+                 g3 + theme_bw(), g4 + theme_bw(),
+                 g5 + theme_bw(), g6 + theme_bw(),
+                 ncol=2, nrow=3)
+ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Wines.pdf"),
+       g, width=7, height=9, units="in")

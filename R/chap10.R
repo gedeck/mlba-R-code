@@ -1,10 +1,9 @@
 
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999)
-
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
-# library(mlba)
 
 # Logistic Regression
 ## The Logistic Regression Model
@@ -60,7 +59,6 @@ g <- ggplot(bank.df, aes(x=Income, y=Personal.Loan)) +
 g
 ggsave(file=file.path("..", "figures", "chapter_10", "fitted_logistic.pdf"), g,
          width=5, height=3)
-
 
 ### Estimating the Logistic Model from Data: Computing Parameter Estimates
 #### Estimated Model
@@ -207,7 +205,6 @@ barplot(aggregate(delays.df$Flight.Status == "delayed", by = list(delays.df$DAY_
                   names.arg = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
 
 
-library(reshape)
 # create matrix for plot
 agg <- delays.df %>%
   mutate(isDelay=1 * (delays.df$Flight.Status == "delayed")) %>%

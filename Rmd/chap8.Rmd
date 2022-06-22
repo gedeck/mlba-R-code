@@ -32,23 +32,19 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999, digits = 3)
-```
-
-```{r}
-library(mlba)
-library(tidyverse)
-library(e1071)
-library(caret)
-library(gains)
 ```
 
 # Solution: Naive Bayes
 ## Example 3: Predicting Delayed Flights
 ```{r}
+library(tidyverse)
+library(caret)
+library(e1071)
 # load and preprocess dataset
 delays.df <- mlba::FlightDelays %>%
   mutate(
@@ -72,6 +68,10 @@ holdout.df <- delays.df[-idx, ]
 # run naive bayes
 delays.nb <- naiveBayes(Flight.Status ~ ., data = train.df)
 delays.nb
+```
+
+```{r}
+
 ```
 
 ```{r}
@@ -101,6 +101,7 @@ confusionMatrix(predict(delays.nb, newdata=holdout.df), holdout.df$Flight.Status
 ```
 
 ```{r}
+library(gains)
 actual <- ifelse(holdout.df$Flight.Status == "delayed", 1, 0)
 gain <- gains(actual, pred.prob[,"delayed"], groups=length(actual) - 2)
 
@@ -117,7 +118,7 @@ ggsave(file=file.path("..", "figures", "chapter_08", "Flights-NB-gain.pdf"),
        last_plot() + theme_bw())
 ```
 
-## 
+## Working with Continuous Predictors
 ```{r}
 (p_delayed = dnorm(213, mean=211.36215, sd=15.31))
   (p_ontime = dnorm(213, mean=211.99436, sd=12.79))

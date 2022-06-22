@@ -32,9 +32,10 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999, digits = 3)
 ```
 
@@ -63,6 +64,10 @@ car.lm <- lm(Price ~ ., data = train.df)
 #  use options() to ensure numbers are not displayed in scientific notation.
 options(scipen = 999)
 summary(car.lm)
+```
+
+```{r}
+
 ```
 
 ```{r}
@@ -136,6 +141,10 @@ metric.full <- collectMetrics(model, train.df, holdout.df)
 
 ```{r}
 predict(model, car.df[1:3,])
+```
+
+```{r}
+
 ```
 
 # Variable Selection in Linear Regression

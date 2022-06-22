@@ -1,7 +1,8 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 options(scipen=999, digits = 3)
 
 # Multiple Linear Regression
@@ -30,6 +31,8 @@ car.lm <- lm(Price ~ ., data = train.df)
 #  use options() to ensure numbers are not displayed in scientific notation.
 options(scipen = 999)
 summary(car.lm)
+
+
 
 
 # use predict() to make predictions on a new set.
@@ -66,7 +69,6 @@ g <- ggplot() +
 ggsave(file=file.path("..", "figures", "chapter_06", "residuals-histogram.pdf"),
        g, width=5, height=3, units="in")
 
-
 ### Cross-validation and caret
 
 set.seed(1)
@@ -98,6 +100,8 @@ metric.full <- collectMetrics(model, train.df, holdout.df)
 
 
 predict(model, car.df[1:3,])
+
+
 
 ## Variable Selection in Linear Regression
 ### How to Reduce the Number of Predictors

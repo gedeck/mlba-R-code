@@ -32,49 +32,64 @@ knitr::opts_chunk$set(error=TRUE,        # Keep compiling upon error
 
 
 ```{r}
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
-# library(mlba)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 ```
 
 # Measuring Distance Between Two Records
 ## Euclidean Distance
 ```{r}
-utilities.df <- mlba::Utilities
-
-# set row names to the utilities column
-row.names(utilities.df) <- utilities.df[,1]
-
-# remove the utility column
-utilities.df <- utilities.df[,-1]
+library(tidyverse)
+# load data and use Company column as row names
+utilities.df <- mlba::Utilities %>%
+  column_to_rownames("Company")
 
 # compute Euclidean distance
-# (to compute other distance measures, change the value in method = )
+# (to compute other distance measures, change the value in the method argument)
 d <- dist(utilities.df, method = "euclidean")
 ```
 
-## Normalizing Numerical Measurements
+## Normalizing Numerical Variables
 ```{r}
 # normalize input variables
-utilities.df.norm <- sapply(utilities.df, scale)
+utilities.df.norm <- scale(utilities.df)
 
-# add row names: utilities
-row.names(utilities.df.norm) <- row.names(utilities.df)
-
-# compute normalized distance based on Sales (column 6) and Fuel Cost (column 8)
-d.norm <- dist(utilities.df.norm[,c(6,8)], method = "euclidean")
+# compute normalized distance based on Sales and Fuel Cost
+d.norm <- dist(utilities.df.norm[,c("Sales","Fuel_Cost")], method="euclidean")
 ```
 
 # Hierarchical (Agglomerative) Clustering
 ## Dendrograms: Displaying Clustering Process and Results
 ```{r}
-# in hclust() set argument method =
-# to "ward.D", "single", "complete", "average", "median", or "centroid"
-hc1 <- hclust(d.norm, method = "single")
-plot(hc1, hang = -1, ann = FALSE)
-hc2 <- hclust(d.norm, method = "average")
-plot(hc2, hang = -1, ann = FALSE)
+library(ggplot2)
+library(ggdendro)
+d.norm <- dist(utilities.df.norm, method="euclidean")
+
+# in hclust() set argument method \galit{to}
+# "ward.D", "single", "complete", "average", "median", or "centroid"
+hc1 <- hclust(d.norm, method="single")
+plot(hc1, hang=-1, ann=FALSE)  # use baseR
+ggdendrogram(hc1)      # use ggdendro package (shown in figure below)
+hc2 <- hclust(d.norm, method="average")
+plot(hc2, hang=-1, ann=FALSE)
+ggdendrogram(hc2)
+```
+
+```{r}
+library(gridExtra)
+addCutline <- function(g, hc, ncluster) {
+  heights <- rev(hc$height)
+  cut_at <- 0.5 * (heights[ncluster] + heights[ncluster - 1])
+  return (g + geom_hline(yintercept=cut_at, color='red', linetype=2))
+}
+g1 <- ggdendrogram(hc1)
+g2 <- ggdendrogram(hc2)
+grid.arrange(addCutline(g1, hc1, 6), addCutline(g2, hc2, 6), nrow=2)
+g <- arrangeGrob(addCutline(g1, hc1, 6), addCutline(g2, hc2, 6), nrow=2)
+ggsave(file=file.path("..", "figures", "chapter_16", "utilities-dendrograms.pdf"),
+       g, width=5, height=8, units="in")
 ```
 
 ```{r}
@@ -90,44 +105,80 @@ memb
 row.names(utilities.df.norm) <- paste(memb, ": ", row.names(utilities.df), sep = "")
 
 # plot heatmap
+heatmap(utilities.df.norm, Colv=NA, hclustfun=hclust)
+```
+
+```{r}
+# grey scale
 # rev() reverses the color mapping to large = dark
 heatmap(as.matrix(utilities.df.norm), Colv = NA, hclustfun = hclust,
         col=rev(paste("gray",1:99,sep="")))
+
+pdf(file=file.path("..", "figures", "chapter_16", "utilities-heatmap.pdf"),
+    width=5, height=5)
+heatmap(utilities.df.norm, Colv=NA, hclustfun=hclust)
+dev.off()
 ```
 
 # Non-hierarchical Clustering: The 
 ## Choosing the Number of Clusters ($k$)
 ```{r}
+set.seed(123) # set random seed for reproducability
 # load and preprocess data
-utilities.df <- mlba::Utilities
-row.names(utilities.df) <- utilities.df[,1]
-utilities.df <- utilities.df[,-1]
+utilities.df <- mlba::Utilities %>%
+  column_to_rownames("Company")
 
 # normalized distance:
-utilities.df.norm <- sapply(utilities.df, scale)
-row.names(utilities.df.norm) <- row.names(utilities.df)
+utilities.df.norm <- scale(utilities.df)
 
 # run kmeans algorithm
 km <- kmeans(utilities.df.norm, 6)
 
 # show cluster membership
-km$cluster
+sort(km$cluster)
 ```
 
 ```{r}
-# plot an empty scatter plot
-plot(c(0), xaxt = 'n', ylab = "", type = "l",
-     ylim = c(min(km$centers), max(km$centers)), xlim = c(0, 8))
+# centroids
+  km$centers
+  # within-cluster sum of squares
+  km$withinss
+  # cluster size
+  km$size
+```
 
-# label x-axes
-axis(1, at = c(1:8), labels = names(utilities.df))
+```{r}
+library(GGally)
+centroids <- data.frame(km$centers)
+centroids['cluster'] = paste('cluster', seq(1, 6))
 
-# plot centroids
-for (i in c(1:6))
-lines(km$centers[i,], lty = i, lwd = 2, col = ifelse(i %in% c(1, 3, 5),
-                            "black", "dark grey"))
+ggparcoord(centroids, columns=1:8, groupColumn='cluster', showPoints=TRUE) +
+    scale_color_viridis_d()
+```
 
-# name clusters
-text(x = 0.5, y = km$centers[, 1], labels = paste("Cluster", c(1:6)))
+```{r}
+ggsave(file=file.path("..", "figures", "chapter_16", "utilities-clusterProfile.pdf"),
+         last_plot() + theme_bw(), width=8, height=3, units="in")
+```
+
+```{r}
+result <- tibble()
+for (k in 1:6) {
+  km <- kmeans(utilities.df.norm, k)
+  result <- bind_rows(result, tibble(k=k, average_withinss=mean(km$withinss)))
+}
+
+ggplot(result, aes(x=k, y=average_withinss)) +
+  geom_line() +
+  geom_point() +
+  labs(y="Average Within-Cluster Squared Distance",
+       x="Number of Clusters (k)") +
+  theme_bw()
+ggsave(file=file.path("..", "figures", "chapter_16", "utilities-ellbow.pdf"),
+       last_plot(), width=4, height=4, units="in")
+```
+
+```{r}
+dist(km$centers)
 ```
 

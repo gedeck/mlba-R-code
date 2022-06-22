@@ -1,19 +1,20 @@
 
-# TODO: remove once package is available on CRAN
-library(devtools)
-install_github("gedeck/mlba/mlba", force=TRUE)
+if (!require(mlba)) {
+  library(devtools)
+  install_github("gedeck/mlba/mlba", force=TRUE)
+}
 
 # $k$-Nearest Neighbors ($k$
 ## The $k$-NN Classifier (Categorical Outcome)
 ### Example: Riding Mowers
 
 library(ggrepel)
-mower.df <- mlba::RidingMowers
+mowers.df <- mlba::RidingMowers
 set.seed(35)
 
-idx <- sample(nrow(mower.df), 0.6*nrow(mower.df))
-train.df <- mower.df[idx, ]
-holdout.df <- mower.df[-idx, ]
+idx <- sample(nrow(mowers.df), 0.6*nrow(mowers.df))
+train.df <- mowers.df[idx, ]
+holdout.df <- mowers.df[-idx, ]
 ## new household
 new.df <- data.frame(Income = 60, Lot_Size = 20)
 
@@ -68,7 +69,7 @@ model <- train(Ownership ~ ., data=train.df,
 model
 
 
-model <- train(Ownership ~ ., data=mower.df,
+model <- train(Ownership ~ ., data=mowers.df,
                method="knn",
                preProcess=c("center", "scale"),
                tuneGrid=expand.grid(k=7),
