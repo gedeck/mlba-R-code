@@ -79,13 +79,15 @@ library(gridExtra)
                   frequency=365)
 
   options(scipen=999)
-  g1 <- autoplot(tunnel.ts, xlab="Time", ylab="Number of Vehicles") +
-    scale_x_yearmon()
+  g1 <- autoplot(tunnel.ts, xlab="Time", ylab="Number of vehicles") +
+    scale_x_yearmon() +
+    scale_y_continuous(labels = scales::comma)
   g2 <- autoplot(window(tunnel.ts,
                  start=c(2004, yday(ISOdate(2004, 2, 1))),
                  end=c(2004, yday(ISOdate(2004, 6, 1)))),
-                 xlab="Time", ylab="Number of Vehicles") +
-    scale_x_yearmon()
+                 xlab="Time", ylab="Number of vehicles") +
+    scale_x_yearmon() +
+    scale_y_continuous(labels = scales::comma)
 
   grid.arrange(g1, g2, nrow=2)
   g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())

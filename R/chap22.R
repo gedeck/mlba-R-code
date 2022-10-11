@@ -126,7 +126,7 @@ combined <- bind_rows(
 )
 ggplot(combined, aes(x=priors_count, y=.value, color=Method)) +
   geom_line() +
-  labs(x="Feature Value", y="Probability of recidivism")
+  labs(x="Feature value", y="Probability of recidivism")
 
 
 ggsave(file=file.path("..", "figures", "chapter_22", "c22f005.pdf"),

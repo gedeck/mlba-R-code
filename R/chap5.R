@@ -52,12 +52,14 @@ g1 <- ggplot() +
     geom_histogram(aes(x=train.residuals), fill="lightgray", color="grey") +
     labs(x="", y="Training") +
     xlim(res.min, res.max) +
+    scale_x_continuous(labels = scales::comma) +
     theme_bw()
 
 g2 <- ggplot() +
     geom_histogram(aes(x=holdout.residuals), fill="lightgray", color="grey") +
     labs(x="", y="Holdout") +
     xlim(res.min, res.max) +
+    scale_x_continuous(labels = scales::comma) +
     theme_bw()
 
 df <- data.frame(
@@ -67,6 +69,7 @@ df <- data.frame(
 g3 <- ggplot(df, aes(x=role, y=residual)) +
     geom_boxplot() +
     labs(x="", y="") +
+    scale_y_continuous(labels = scales::comma) +
     theme_bw()
 
 grid.arrange(g1, g2, g3, ncol=3)
@@ -96,7 +99,8 @@ g1 <- ggplot(df, aes(x=ncases, y=cumPrice)) +
   geom_line() +
   geom_line(data=data.frame(ncases=c(0, nrow(holdout.df)), cumPrice=c(0, sum(price))),
             color="gray", linetype=2) + # adds baseline
-  labs(x="# cases", y="Cumulative Price", title="Cumulative gains chart")
+  labs(x="# Cases", y="Cumulative price", title="Cumulative gains chart") +
+  scale_y_continuous(labels = scales::comma) 
 
 # Decile-wise lift chart
 df <- data.frame(
@@ -105,7 +109,7 @@ df <- data.frame(
 )
 g2 <- ggplot(df, aes(x=percentile, y=meanResponse)) +
   geom_bar(stat="identity") +
-  labs(x="Percentile", y="Decile Mean / Global Mean", title="Decile-wise lift chart")
+  labs(x="Percentile", y="Decile mean / global mean", title="Decile-wise lift chart")
 
 grid.arrange(g1, g2, ncol=2)
 
@@ -135,7 +139,7 @@ ggsave(file=file.path("..", "figures", "chapter_05", "MLR-toyotalift.pdf"),
                   color="lightblue") +
         geom_point(data=personal_loan, color="steelblue") +
         labs(title=title, colour="Personal\nLoan", x="Annual income ($000s)",
-             y="Monthly average credict card spending ($000s)") +
+             y="Monthly average credit card spending ($000s)") +
         scale_color_brewer(palette="Set1",
                guide=guide_legend(override.aes=list(size=3, alpha=1))) +
         scale_x_log10() +
@@ -187,7 +191,7 @@ result$Error <- 1 - result$Accuracy
 ggplot(result, aes(x=Threshold)) +
   geom_line(aes(y=Accuracy, linetype="Accuracy")) +
   geom_line(aes(y=Error, linetype="Overall error"), color="gray") +
-  labs(x="Threshold Value", y="", linetype="Legend")
+  labs(x="Threshold value", y="", linetype="Legend")
 
 
   g <- last_plot() + theme_bw() +
@@ -224,15 +228,15 @@ library(ROCR)
 predob <- prediction(df$prob, df$actual)
 perf <- performance(predob, "tpr", "fpr")
 perf.df <- data.frame(
-  threshold=performance(predob, "prec")@x.values[[1]],
-  precision=performance(predob, "prec")@y.values[[1]],
-  recall=performance(predob, "rec")@y.values[[1]]
+  Threshold=performance(predob, "prec")@x.values[[1]],
+  Precision=performance(predob, "prec")@y.values[[1]],
+  Recall=performance(predob, "rec")@y.values[[1]]
 )
-perf.df$f1 = 2*perf.df$precision*perf.df$recall / (perf.df$recall + perf.df$precision)
-g <- ggplot(perf.df, aes(x=threshold)) +
-  geom_line(aes(y=precision, color="precision", linetype="precision"), size=1) +
-  geom_line(aes(y=recall, color="recall", linetype="recall"), size=1) +
-  geom_line(aes(y=f1, color="f1", linetype="f1"), size=1) +
+perf.df$F1 = 2*perf.df$Precision*perf.df$Recall / (perf.df$Recall + perf.df$Precision)
+g <- ggplot(perf.df, aes(x=Threshold)) +
+  geom_line(aes(y=Precision, color="Precision", linetype="Precision"), size=1) +
+  geom_line(aes(y=Recall, color="Recall", linetype="Recall"), size=1) +
+  geom_line(aes(y=F1, color="F1", linetype="F1"), size=1) +
   labs(x="Threshold", y="Metric", linetype="Metrics", color="Metrics")
 g
 
@@ -250,13 +254,14 @@ df <- mlba::LiftExample %>%
 # first option with 'ROCR' library:
 pred <- prediction(df$prob, df$actual)
 perf <- performance(pred, "tpr", "rpp")
-plot(perf, xlab="Ratio of Cases", ylab="Ratio of Samples Found")
+plot(perf, xlab="Ratio of cases", ylab="Ratio of samples found")
 lines(c(0, 1), c(0, 1), lty='dashed')
 
 # second option with 'caret' library:
 # load data and make actual a factor variable with 1 as the reference class
 lift.example <- caret::lift(actual ~ prob, data=df)
-ggplot(lift.example, plot = "gain")
+ggplot(lift.example, plot = "gain") +
+  labs(x="# Samples tested", y="# Samples found")
 
 # third option with 'gains' library:
 library(gains)
@@ -270,7 +275,7 @@ ggplot(result, aes(x=ncases, y=cumulative)) +
   geom_line() +
   geom_segment(aes(x=0, y=0, xend=nrow(df), yend=sum(df$actual)),
                color="gray", linetype=2) + # adds baseline
-  labs(x="# Cases", y="# Samples Found")
+  labs(x="# Cases", y="# Samples found")
 
 
 g3 <- last_plot()
@@ -282,9 +287,10 @@ perf.df <- data.frame(
 g1 <- ggplot(perf.df, aes(x=tpr, y=fpr)) +
   geom_line() +
   geom_segment(aes(x=0, y=0, xend=1, yend=1), color="grey", linetype="dashed") +
-  labs(x="Ratio of Cases", y="Ratio of Samples Found")
+  labs(x="Ratio of cases", y="Ratio of samples found")
 
-g2 <- ggplot(lift.example, plot = "gain")
+g2 <- ggplot(lift.example, plot = "gain") +
+  labs(x="# Samples tested", y="# Samples found")
 
 g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), g3 + theme_bw(), ncol=3)
 ggsave(file=file.path("..", "figures", "chapter_05", "gainsChartClassification.pdf"),
@@ -298,13 +304,13 @@ df <- mlba::LiftExample
 # use gains() to compute deciles.
 gain <- gains(df$actual, df$prob)
 barplot(gain$mean.resp / mean(df$actual), names.arg=seq(10, 100, by=10),
-        xlab="Percentile", ylab="Decile Mean / Global Mean")
+        xlab="Percentile", ylab="Decile mean / global mean")
 
 
 pdf(file=file.path("..", "figures", "chapter_05", "decileLiftClassification.pdf"),
     width=6, height=4)
   barplot(gain$mean.resp / mean(df$actual), names.arg=seq(10, 100, by=10),
-          xlab="Percentile", ylab="Decile Mean / Global Mean")
+          xlab="Percentile", ylab="Decile mean / global mean")
 dev.off()
 
 # Here is code to achieve the same using ROCR with the performance data used for
@@ -326,10 +332,10 @@ for (decile in seq(0.1, 1, by=0.1)) {
   decileLift <- rbind(decileLift, c(current[1], currentLift))
   last <- current
 }
-colnames(decileLift) <- c("Percentile", "Decile Mean / Global Mean")
+colnames(decileLift) <- c("Percentile", "Decile mean / global mean")
 print(decileLift)
-barplot(decileLift[,"Decile Mean / Global Mean"], names.arg=round(100*decileLift$Percentile, 0),
-        xlab="Percentile", ylab="Decile Mean / Global Mean")
+barplot(decileLift[,"Decile mean / global mean"], names.arg=round(100*decileLift$Percentile, 0),
+        xlab="Percentile", ylab="Decile mean / global mean")
 
 ### Cumulative Gains as a Function of Threshold
 
@@ -346,7 +352,7 @@ plot(caret::lift(actual ~ prob, data=df), plot="lift")
   pdf(file=file.path("..", "figures", "chapter_05", "prob5-4.pdf"),
     width=6, height=4)
     barplot(lift, names.arg=seq(10, 100, by=10),
-            xlab="Percentile", ylab="Decile Mean / Global Mean")
+            xlab="Percentile", ylab="Decile mean / global mean")
   dev.off()
 
 
@@ -376,7 +382,8 @@ g1 <- ggplot(df, aes(x=ncases, y=cumPrice)) +
   geom_line() +
   geom_line(data=data.frame(ncases=c(0, nrow(holdout.df)), cumPrice=c(0, sum(price))),
             color="gray", linetype=2) + # adds baseline
-  labs(x="# cases", y="Cumulative Price", title="Cumulative gains chart")
+  scale_y_continuous(labels = scales::comma) +
+  labs(x="# Cases", y="Cumulative price", title="Cumulative gains chart")
 # Decile-wise lift chart
 gain <- gains(holdout.df$sales, predict(model, holdout.df))
 df <- data.frame(
@@ -385,7 +392,7 @@ df <- data.frame(
 )
 g2 <- ggplot(df, aes(x=percentile, y=meanResponse)) +
   geom_bar(stat="identity") +
-  labs(x="Percentile", y="Decile Mean / Global Mean", title="Decile-wise lift chart")
+  labs(x="Percentile", y="Decile mean / global mean", title="Decile-wise lift chart")
 grid.arrange(g1, g2, ncol=2)
 
 g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2)

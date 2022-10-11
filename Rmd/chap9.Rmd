@@ -55,7 +55,7 @@ plot_common_styling <- function(g, filename) {
     geom_point(size=2) +
     scale_color_manual(values=c("darkorange", "steelblue")) +
     scale_fill_manual(values=c("darkorange", "lightblue")) +
-    labs(x="Income ($000s)", y="Lot Size (000s sqft)") +
+    labs(x="Income ($000s)", y="Lot size (000s sqft)") +
     theme_bw() +
     theme(legend.position=c(0.89, 0.91),
           legend.title=element_blank(),
@@ -86,13 +86,13 @@ ggplot() +
   scale_x_continuous(limits=c(0,1)) +
   geom_hline(yintercept=0.5, linetype=2, color="grey") +
   geom_hline(yintercept=1, linetype=2, color="grey") +
-  geom_function(aes(color="Entropy Measure"),
+  geom_function(aes(color="Entropy measure"),
                 fun = function(x) {- x*log2(x) - (1-x)*log2(1-x)},
                 xlim=c(0.0001, 0.9999), n=100) +
-  geom_function(aes(color="Gini Index"),
+  geom_function(aes(color="Gini index"),
                 fun = function(x) {1 - x^2 - (1-x)^2}) +
-  labs(y="Impurity Measure", x=expression(~italic(p)[1]), color="Impurity Measure") +
-  scale_color_manual(values=c("Entropy Measure"="darkorange", "Gini Index"="steelblue"))
+  labs(y="Impurity measure", x=expression(~italic(p)[1]), color="Impurity measure") +
+  scale_color_manual(values=c("Entropy measure"="darkorange", "Gini Index"="steelblue"))
 
 ggsave(file=file.path("..", "figures", "chapter_09", "gini_entropy.pdf"),
        last_plot() + theme_bw(), width=5, height=2.5, units="in")
@@ -332,11 +332,11 @@ rocCurveData <- function(model, data) {
 }
 
 performance.df <- rbind(
-  cbind(rocCurveData(best.ct, holdout.df), model="Best pruned tree"),
+  cbind(rocCurveData(best.ct, holdout.df), model="Best-pruned tree"),
   cbind(rocCurveData(rf, holdout.df), model="Random forest"),
   cbind(rocCurveData(xgb, holdout.df), model="xgboost")
 )
-colors <- c("Best pruned tree"="grey", "Random forest"="blue", "xgboost"="tomato")
+colors <- c("Best-pruned tree"="grey", "Random forest"="blue", "xgboost"="tomato")
 ggplot(performance.df, aes(x=tpr, y=fpr, color=model)) +
   geom_line() +
   scale_color_manual(values=colors) +

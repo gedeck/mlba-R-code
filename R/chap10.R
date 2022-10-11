@@ -115,7 +115,7 @@ nactual <-sum(actual)
 g1 <- ggplot() +
   geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual)) +
   geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
-  labs(x="# cases", y="Cumulative")
+  labs(x="# Cases", y="Cumulative") 
 
 # plot decile-wise lift chart
 gain10 <- gains(actual, logit.reg.pred[,2], groups=10)
@@ -159,7 +159,7 @@ averageDelay <- delays.df %>%
 
 ggplot(averageDelay, aes(x=DAY_WEEK, y=mean)) +
   geom_col(fill='steelblue') +
-  labs(x='Day of Week', y='Average Delay')
+  labs(x='Day of Week', y='Average delay')
 
 
 
@@ -172,7 +172,7 @@ averageDelayChart <- function(data, groupBy, xlabel) {
   return (ggplot(averageDelay, aes_string(x=groupBy, y='mean')) +
     geom_col(fill='steelblue') +
     theme_bw() +
-    labs(x=xlabel, y='Average Delay'))
+    labs(x=xlabel, y='Average delay'))
 }
 binned.df <- data.frame(
   Flight.Status = delays.df$Flight.Status,
@@ -262,7 +262,7 @@ nactual <-sum(actual)
 ggplot() +
   geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual)) +
   geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
-  labs(x="# cases", y="Cumulative")
+  labs(x="# Cases", y="Cumulative")
 
 
 confusionMatrix(predict(model, holdout.df), holdout.df$Flight.Status)
@@ -335,7 +335,7 @@ ggplot() +
   geom_line(aes(x=redGain$cume.obs, y=redGain$cume.pct.of.total * nactual)) +
   geom_line(aes(x=lassoGain$cume.obs, y=lassoGain$cume.pct.of.total * nactual), color='red') +
   geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
-  labs(x="# cases", y="Cumulative")
+  labs(x="# Cases", y="Cumulative")
 
 ggsave(file=file.path("..", "figures", "chapter_10", "LRFlightDelaysCoefsReduced.pdf"),
        last_plot() + theme_bw(), width=3, height=3)

@@ -62,11 +62,11 @@ performance.df <- rbind(
   cbind(rocCurveData(predict(tr, holdout.df, type="prob")[,"Yes"], holdout.df),
         model="Single tree"),
   cbind(rocCurveData(predict(bag.rf, holdout.df, type="prob")[,"Yes"], holdout.df),
-        model="Random Forest"),
+        model="Random forest"),
   cbind(rocCurveData(predict(boost.xgb, holdout.df, type="prob")[,"Yes"], holdout.df),
         model="xgboost")
 )
-colors <- c("Single tree"="grey", "Random Forest"="blue", "xgboost"="tomato")
+colors <- c("Single tree"="grey", "Random forest"="blue", "xgboost"="tomato")
 g2 <- ggplot(performance.df, aes(x=tpr, y=fpr, color=model)) +
   geom_line() +
   scale_color_manual(values=colors) +

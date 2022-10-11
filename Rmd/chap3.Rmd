@@ -45,7 +45,7 @@ housing.df <- mlba::BostonHousing
 head(housing.df, 9)
 ```
 
-# Basic Charts: Bar Charts, Line 
+# Basic Charts: Bar Charts, Line Charts, and Scatter Plots
 ## Example 2: Ridership on Amtrak Trains
 ```{r}
 # Amtrak data
@@ -126,13 +126,13 @@ boxplot(housing.df$MEDV ~ housing.df$CHAS, xlab="CHAS", ylab="MEDV")
 ```
 
 ```{r}
-ggplot(housing.df) + geom_histogram(aes(x=MEDV), bins=9)
+ggplot(housing.df) + geom_histogram(aes(x=MEDV), bins=9) + ylab("Count")
 
 ggplot(housing.df) + geom_boxplot(aes(x=as.factor(CHAS), y=MEDV)) + xlab("CHAS")
 ```
 
 ```{r}
-ggplot(housing.df) + geom_histogram(aes(x=MEDV), bins=9)
+ggplot(housing.df) + geom_histogram(aes(x=MEDV), bins=9) + ylab("Count")
 ggsave(file=file.path("..", "figures", "chapter_03", "Viz-Histogram.pdf"),
        last_plot() + theme_bw(), width=2.5, height=2, units="in")
 
@@ -349,14 +349,14 @@ lines(ridership.lm$fitted, lwd=2)
 ridership.2yrs <- window(ridership.ts, start=c(1991,1), end=c(1992,12))
 plot(ridership.2yrs, xlab="Year", ylab="Ridership (in 000s)", ylim=c(1300, 2300))
 monthly.ridership.ts <- tapply(ridership.ts, cycle(ridership.ts), mean)
-plot(monthly.ridership.ts, xlab="Month", ylab="Average Ridership",
+plot(monthly.ridership.ts, xlab="Month", ylab="Average ridership",
     ylim=c(1300, 2300), type="l", xaxt="n")
 ## set x labels
 axis(1, at=c(1:12), labels=c("Jan","Feb","Mar", "Apr","May","Jun",
                              "Jul","Aug","Sep",  "Oct","Nov","Dec"))
 
 annual.ridership.ts <- aggregate(ridership.ts, FUN=mean)
-plot(annual.ridership.ts, xlab="Year", ylab="Average Ridership",
+plot(annual.ridership.ts, xlab="Year", ylab="Average ridership",
     ylim=c(1300, 2300))
 ```
 
@@ -379,11 +379,11 @@ df <- data.frame(
   month=factor(months, levels=months))
 g3 <- ggplot(df, aes(x=month, y=monthly.ridership)) + ylim(1300, 2300) +
   geom_line(group=1) +
-  labs(x="Month", y="Average Ridership")
+  labs(x="Month", y="Average ridership")
 
 annual.ridership.ts <- aggregate(ridership.ts, FUN=mean)
 g4 <- autoplot(annual.ridership.ts) + ylim(1300, 2300) +
-  labs(x="Year", y="Average Ridership")
+  labs(x="Year", y="Average ridership")
 ```
 
 ```{r}
@@ -401,7 +401,7 @@ ggsave(file=file.path("..", "figures", "chapter_03", "Viz-AmtrakTimePlotTS.pdf")
 utilities.df <- mlba::Utilities
 
 plot(utilities.df$Fuel_Cost ~ utilities.df$Sales,
-     xlab = "Sales", ylab = "Fuel Cost", xlim = c(2000, 20000))
+     xlab = "Sales", ylab = "Fuel cost", xlim = c(2000, 20000))
 text(x = utilities.df$Sales, y = utilities.df$Fuel_Cost,
      labels = utilities.df$Company, pos = 4, cex = 0.8, srt = 20, offset = 0.2)
 ```
@@ -411,7 +411,7 @@ library(ggrepel)
 ggplot(utilities.df, aes(y = Fuel_Cost, x = Sales)) +
   geom_point() +
   geom_text_repel(aes(label=Company)) +
-  labs(x="Sales", y="Fuel Cost")
+  labs(x="Sales", y="Fuel cost")
 ```
 
 ```{r}
@@ -460,7 +460,8 @@ parcoord(housing.df[housing.df$CAT.MEDV == 1, -14], main = "CAT.MEDV = 1")
 library(GGally)
 
 ggparcoord(subset(housing.df, select=-CAT.MEDV), scale="uniminmax", alpha=0.3) +
-  facet_wrap(vars(housing.df$CAT.MEDV), nrow=2)
+  facet_wrap(vars(housing.df$CAT.MEDV), nrow=2) + 
+  labs(x="Variable", y="Value")
 ```
 
 ```{r}
@@ -548,7 +549,8 @@ SCstudents <- mlba::SCstudents
 map <- get_stamenmap(us, zoom=5)
 ggmap(map) +
   geom_point(aes(x=longitude, y=latitude), data=SCstudents,
-    alpha=0.4, colour="red", size=0.75)
+    alpha=0.4, colour="red", size=0.75) +
+  labs(x="Longitude", y="Latitude")
 ```
 
 ```{r}

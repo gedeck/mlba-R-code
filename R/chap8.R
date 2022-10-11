@@ -70,7 +70,7 @@ nactual <-sum(actual)
 ggplot() +
   geom_line(aes(x=gain$cume.obs, y=gain$cume.pct.of.total * nactual)) +
   geom_line(aes(x=c(0, max(gain$cume.obs)), y=c(0, nactual)), color="darkgrey") +
-  labs(x="# cases", y="Cumulative")
+  labs(x="# Cases", y="Cumulative")
 
 
 ggsave(file=file.path("..", "figures", "chapter_08", "Flights-NB-gain.pdf"),

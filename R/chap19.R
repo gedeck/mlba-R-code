@@ -28,8 +28,8 @@ ma.trailing <- rollmean(ridership.ts, k = 12, align = "right")
 # generate a plot
 colData <- "steelblue"; colModel <- "tomato"
 autoplot(ridership.ts, ylab="Ridership", color=colData) +
-  autolayer(ma.centered, series="centered", size=1.1) +
-  autolayer(ma.trailing, series="trailing", size=1.1) +
+  autolayer(ma.centered, series="Centered", size=1.1) +
+  autolayer(ma.trailing, series="Trailing", size=1.1) +
   scale_color_manual(name="Moving average", values=c("forestgreen", colModel))
 
 
@@ -97,7 +97,7 @@ autoplot(train.ts, ylab="Ridership", color=colData) +
 train.lm.trend.season <- tslm(train.ts ~ trend + I(trend^2) + season)
 
 # create single-point forecast
-train.lm.trend.season.pred <- forecast(train.lm.trend.season, h = 1, level = 0)
+train.lm.trend.season.pred <- forecast(train.lm.trend.season, h = 1)
 
 # apply MA to residuals
 ma.trailing <- rollmean(train.lm.trend.season$residuals, k = 12, align = "right")
@@ -316,11 +316,11 @@ test.ts <- window(sales.ts, start=c(1, 21))
 ses <- ets(train.ts, restrict=FALSE, model="ZMM", alpha=0.2, beta=0.15, gamma=0.05)
 ses.pred <- forecast(ses, h=nTest, level=0)
 
-g1 <- autoplot(train.ts, xlab="Year-Quarter", ylab="Sales ($)", series="Data") +
+g1 <- autoplot(train.ts, xlab="Year-quarter", ylab="Sales ($)", series="Data") +
   autolayer(ses$fitted, series="Model") +
   scale_x_yearqtr(format = "Y%Y-Q%q") +
   scale_color_manual(name="", values=c(colData, colModel))
-g2 <- autoplot(train.ts - ses$fitted, xlab="Year-Quarter", ylab="Forecast Error") +
+g2 <- autoplot(train.ts - ses$fitted, xlab="Year-quarter", ylab="Forecast error") +
   scale_x_yearqtr(format = "Y%Y-Q%q")
 grid.arrange(g1, g2, nrow=2)
 

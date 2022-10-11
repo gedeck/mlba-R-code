@@ -152,7 +152,7 @@ dim(y_train)
 
 
 # Model definition (architecture taken from
-# https://keras.rstudio.com/articles/examples/mnist_cnn.html )
+# https://keras.rstudio.com/articles/examples/mnist_cnn.html
 input_shape = dim(x_train)[2:4]
 num_classes <- 10
 

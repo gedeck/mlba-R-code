@@ -33,7 +33,7 @@ makePlot  <- function(df, title, alpha) {
       geom_point(aes(color="nonacceptor"), data=no_personal_loan, alpha=alpha) +
       geom_point(aes(color="acceptor"), data=personal_loan) +
       labs(title=title, colour="Personal Loan", x='Annual income ($000s)',
-           y='Monthly average credict card spending ($000s)') +
+           y='Monthly average credit card spending ($000s)') +
       scale_color_manual(values=c("lightblue", "steelblue"),
              guide=guide_legend(override.aes=list(size=3, alpha=1))) +
       scale_x_log10() +
@@ -97,7 +97,9 @@ g <- ggplot(mowers.df, mapping=aes(x=Income, y=Lot_Size, color=Ownership, fill=O
   scale_shape_manual(values = c(15, 21)) +
   scale_color_manual(values = c('darkorange', 'steelblue')) +
   scale_fill_manual(values = c('darkorange', 'lightblue')) +
-  scale_linetype_manual(values=c(2, 1), labels=c('ad hoc line', 'LDA line'))
+  scale_linetype_manual(name='Linetype', values=c(2, 1), labels=c('ad hoc line', 'LDA line')) +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 1), 
+         linetype = guide_legend(order = 2))
 g
 ggsave(file=file.path("..", "figures", "chapter_12", "LDA-riding-mower.pdf"),
        g + theme_bw(), width=6, height=4, units="in")

@@ -57,7 +57,7 @@ plotForecast <- function(model, train.ts, test.ts) {
 }
 plotResiduals <- function(model, test.ts) {
   model.pred <- forecast(model, h=length(test.ts), level=0)
-  g <- autoplot(model$residuals, xlab="Time", ylab="Forecast Errors", color=colModel, size=0.75) +
+  g <- autoplot(model$residuals, xlab="Time", ylab="Forecast errors", color=colModel, size=0.75) +
     autolayer(test.ts - model.pred$mean, color=colModel, size=0.75) +
     geom_hline(yintercept=0, color="darkgrey") +
     coord_cartesian(ylim=c(-410, 410))
@@ -247,7 +247,7 @@ airTravel.ts <- ts(mlba::Sept11Travel$Air.RPM..000s., start = c(1990, 1), freq =
 airTravel.ts <- window(airTravel.ts, start=c(1990, 1), end=c(2001, 8))
 g <- autoplot((airTravel.ts - decompose(airTravel.ts)$seasonal) / 1000000,
                xlab="Month",
-               ylab="Seasonally adjusted Air Revenue\n Passenger Miles ($billions)") +
+               ylab="Seasonally adjusted air revenue\n passenger miles ($ billions)") +
   scale_x_yearmon() +
   ylim(0, 63) +
   theme_bw()
@@ -273,7 +273,7 @@ walmart <- mlba::WalMartStock
 # use zoo to handle the gaps in the dates
 walmart.zoo <- zoo(walmart$Close, as.Date(walmart$Date, "%d-%b-%y"))
 autoplot(walmart.zoo) +
-  labs(xlab="Time", ylab="Close Price ($)")
+  labs(x="Time", y="Close price ($)")
 g <- last_plot() + theme_bw()
 ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Walmart.pdf"),
        last_plot() + theme_bw(), width=5, height=4, units="in")
@@ -289,7 +289,7 @@ ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Walmart-acf.pdf")
 
 
 sales.ts <- ts(mlba::DepartmentStoreSales$Sales, freq=4)
-autoplot(sales.ts, xlab="Year-Quarter", ylab="Sales") +
+autoplot(sales.ts, xlab="Year-quarter", ylab="Sales") +
   geom_point() +
   scale_x_yearqtr(format = "Y%Y-Q%q")
 ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-DeptStore.pdf"),
@@ -304,7 +304,8 @@ summary(model)
 
 g1 <- autoplot(train.ts, xlab="Year", ylab="Sales") +
   geom_point() +
-  autolayer(model$fitted.values, color=colModel)
+  autolayer(model$fitted.values, color=colModel) +
+  scale_y_continuous(labels = scales::comma)
 g2 <- autoplot(model$residuals, xlab="Year", ylab="Residuals")
 grid.arrange(g1, g2, nrow=2)
 g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw())
@@ -316,8 +317,10 @@ sales.df <- mlba::SouvenirSales
 sales.ts <- ts(sales.df$Sales, start=c(1995, 1), end=c(2001, 12), freq=12)
 
 g1 <- autoplot(sales.ts, xlab="Time", ylab="Sales (Australian $)") +
-  geom_point(size=0.5)
-g2 <- g1 + scale_y_log10()
+  geom_point(size=0.5) +
+  scale_y_continuous(labels = scales::comma)
+g2 <- g1 + 
+  scale_y_log10(labels = scales::comma)
 grid.arrange(g1, g2, ncol=2)
 g <- arrangeGrob(g1 + theme_bw(), g2 + theme_bw(), ncol=2)
 ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-SouvenirShop.pdf"),
@@ -337,17 +340,17 @@ ggsave(file=file.path("..", "figures", "chapter_18", "Exercise-Appliances.pdf"),
 wines <- mlba::AustralianWines
 wines.ts <- ts(wines, start=c(1980, 1), freq=12)
 
-g1 <- autoplot(wines.ts[, "sweet.white"], main="Sweet Wine Sales",
+g1 <- autoplot(wines.ts[, "sweet.white"], main="Sweet wine sales",
                xlab="Year", ylab="Thousands of liters")
-g2 <- autoplot(wines.ts[, "rose"], main="Rose Wine Sales",
+g2 <- autoplot(wines.ts[, "rose"], main="Rose wine sales",
                xlab="Year", ylab="Thousands of liters")
-g3 <- autoplot(wines.ts[, "sparkling"], main="Sparkling Wine Sales",
+g3 <- autoplot(wines.ts[, "sparkling"], main="Sparkling wine sales",
                xlab="Year", ylab="Thousands of liters")
-g4 <- autoplot(wines.ts[, "red"], main="Red Wine Sales",
+g4 <- autoplot(wines.ts[, "red"], main="Red wine sales",
                xlab="Year", ylab="Thousands of liters")
-g5 <- autoplot(wines.ts[, "dry.white"], main="Dry White Wine Sales",
+g5 <- autoplot(wines.ts[, "dry.white"], main="Dry white wine sales",
                xlab="Year", ylab="Thousands of liters")
-g6 <- autoplot(wines.ts[, "fortified"], main="Fortified Wine Sales",
+g6 <- autoplot(wines.ts[, "fortified"], main="Fortified wine sales",
                xlab="Year", ylab="Thousands of liters")
 
 grid.arrange(g1, g2, g3, g4, g5, g6, ncol=2, nrow=3)

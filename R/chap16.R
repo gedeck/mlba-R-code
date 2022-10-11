@@ -108,14 +108,15 @@ sort(km$cluster)
 
 library(GGally)
 centroids <- data.frame(km$centers)
-centroids['cluster'] = paste('cluster', seq(1, 6))
+centroids['Cluster'] = paste('Cluster', seq(1, 6))
 
-ggparcoord(centroids, columns=1:8, groupColumn='cluster', showPoints=TRUE) +
-    scale_color_viridis_d()
+ggparcoord(centroids, columns=1:8, groupColumn='Cluster', showPoints=TRUE) +
+    scale_color_viridis_d() +
+    labs(x='Variable', y='Value')
 
 
   ggsave(file=file.path("..", "figures", "chapter_16", "utilities-clusterProfile.pdf"),
-         last_plot() + theme_bw(), width=8, height=3, units="in")
+         last_plot() + theme_bw(), width=8.5, height=3.2, units="in")
 
 
 result <- tibble()
@@ -127,8 +128,8 @@ for (k in 1:6) {
 ggplot(result, aes(x=k, y=average_withinss)) +
   geom_line() +
   geom_point() +
-  labs(y="Average Within-Cluster Squared Distance",
-       x="Number of Clusters (k)") +
+  labs(y="Average within-cluster squared distance",
+       x=expression(paste("Number of clusters ", italic("k")))) +
   theme_bw()
 ggsave(file=file.path("..", "figures", "chapter_16", "utilities-ellbow.pdf"),
        last_plot(), width=4, height=4, units="in")

@@ -121,13 +121,13 @@ prob <- predict(logit.reg, newdata=holdout.df, type="prob")[,2]
 actual <- ifelse(holdout.df$label == 1, 1, 0)
 gain <- gains(actual, prob)
 barplot(gain$mean.resp/mean(actual), names.arg=seq(10, 100, by=10),
-        xlab="Percentile", ylab="Decile Mean / Global Mean")
+        xlab="Percentile", ylab="Decile mean / global mean")
 
 
 pdf(file=file.path("..", "figures", "chapter_21", "decileLiftClassification.pdf"),
     width=6, height=4)
     barplot(gain$mean.resp/mean(actual), names.arg=seq(10, 100, by=10),
-            xlab="Percentile", ylab="Decile Mean / Global Mean")
+            xlab="Percentile", ylab="Decile mean / global mean")
 dev.off()
 
 

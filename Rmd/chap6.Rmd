@@ -96,13 +96,13 @@ all.residuals <- holdout.df$Price - pred
 
 ggplot() +
     geom_histogram(aes(x=all.residuals), fill="lightgray", color="grey") +
-    labs(x="Residuals", Y="Frequency")
+    labs(x="Residuals", y="Frequency")
 ```
 
 ```{r}
 g <- ggplot() +
          geom_histogram(aes(x=all.residuals), fill="lightgray", color="grey") +
-         labs(x="Residuals", Y="Frequency") +
+         labs(x="Residuals", y="Frequency") +
          theme_bw()
 ggsave(file=file.path("..", "figures", "chapter_06", "residuals-histogram.pdf"),
        g, width=5, height=3, units="in")
@@ -292,14 +292,14 @@ g1 <- ggplot(ridge.model$results, aes(x=lambda, y=RMSE)) +
     geom_line() +
     geom_point(data=ridge.model$results %>% subset(RMSE == min(RMSE)), color='red') +
     labs(x=expression(paste('Ridge parameter ', lambda)),
-         y='RMSE (Cross-Validation)') +
+         y='RMSE (cross-validation)') +
     scale_x_log10()
 g2 <- ggplot(lasso.model$results, aes(x=lambda, y=RMSE)) +
     geom_pointrange(aes(ymin=RMSE-RMSESD, ymax=RMSE+RMSESD), color='grey') +
     geom_line() +
     geom_point(data=lasso.model$results %>% subset(RMSE == min(RMSE)), color='red') +
     labs(x=expression(paste('Lasso parameter ', lambda)),
-         y='RMSE (Cross-Validation)') +
+         y='RMSE (cross-validation)') +
     scale_x_log10()
 grid.arrange(g1, g2, ncol=2)
 
