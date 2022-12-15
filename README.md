@@ -1,5 +1,3 @@
-<style> table { border: 0px; } td { border: 0px; vertical-align: top; } .inner { max-width: 800px; } </style>
-
 <table>
 <tr>
 <td><img src="img/mlba-bookcover.png" width=300></td>
