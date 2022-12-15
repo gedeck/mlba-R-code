@@ -11,6 +11,8 @@ Publisher: Wiley; 2nd edition (February, 2023)
 ISBN: 978-1-118-83517-2
 Preorder on 
 <a href="https://www.wiley.com/en-us/Machine+Learning+for+Business+Analytics%3A+Concepts%2C+Techniques%2C+and+Applications+in+R%2C+2nd+Edition-p-9781119835172">Wiley</a>
+or
+<a href="https://www.amazon.com/Machine-Learning-Business-Analytics-Applications/dp/1119835178/">Amazon</a>
 
 <!-- Errata: http://oreilly.com/catalog/errata.csp?isbn=9781492072942 -->
 </td>
@@ -22,12 +24,23 @@ Machine learning —also known as data mining or data analytics— is a fundamen
 
 Machine Learning for Business Analytics: Concepts, Techniques, and Applications in R provides a comprehensive introduction and an overview of this methodology. This best-selling textbook covers both statistical and machine learning algorithms for prediction, classification, visualization, dimension reduction, rule mining, recommendations, clustering, text mining, experimentation and network analytics. Along with hands-on exercises and real-life case studies, it also discusses managerial and ethical issues for responsible use of machine learning techniques.
 
-# Source code and instructors material
-The source code used in the chapters is available from here. To find instructors material go to [www.dataminingbook.com](https://www.dataminingbook.com/book/r-2nd-edition-2022). 
+# Source code, datasets, and instructors material
+This repository contains:
+
+- `Rmd`: R code of individual chapters as 
+  [R markdown files](https://github.com/gedeck/mlba-R-code/tree/main/Rmd) - 
+  [download all as mlba-Rmd.zip](Rmd.zip)
+- `R`: R code of individual chapters as plain R
+  [R files](https://github.com/gedeck/mlba-R-code/tree/main/R) - 
+  [download all as mlba-R.zip](R.zip)
+
+The datasets are distributed using the [mlba](https://github.com/gedeck/mlba) package; see below for installation instructions. 
+To find instructors material go to [www.dataminingbook.com](https://www.dataminingbook.com/book/r-2nd-edition-2022). 
 
 
 # Installation of R packages used in the book
-Most packages can be installed directly from CRAN. 
+R and most packages can be installed directly from [CRAN](https://cran.r-project.org/). Go there for instructions on how to install R and individual packages. 
+The [RStudio IDE](https://posit.co/downloads/) is a 
 
 ## MLBA
 The `mlba` package is available from [](https://github.com/gedeck/mlba). You can install this package using the following commands:
