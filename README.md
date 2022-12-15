@@ -29,10 +29,10 @@ This repository contains:
 
 - `Rmd`: R code of individual chapters as 
   [R markdown files](https://github.com/gedeck/mlba-R-code/tree/main/Rmd) - 
-  [download all as mlba-Rmd.zip](Rmd.zip)
+  download all as [mlba-Rmd.zip](Rmd.zip)
 - `R`: R code of individual chapters as plain R
   [R files](https://github.com/gedeck/mlba-R-code/tree/main/R) - 
-  [download all as mlba-R.zip](R.zip)
+  download all as [mlba-R.zip](R.zip)
 
 The datasets are distributed using the [mlba](https://github.com/gedeck/mlba) package; see below for installation instructions. 
 To find instructors material go to [www.dataminingbook.com](https://www.dataminingbook.com/book/r-2nd-edition-2022). 
