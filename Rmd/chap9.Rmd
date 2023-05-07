@@ -279,9 +279,9 @@ cv.rt <- rpart(Price ~ ., data=car.train.df, method="anova",
     cp=0.00001, minsplit=5, xval=5)
 
 # prune by lower cp
-minErrorRow <- cv.rt$cptable[which.min(cv.ct$cptable[,"xerror"]), ]
+minErrorRow <- cv.rt$cptable[which.min(cv.rt$cptable[,"xerror"]), ]
 cutoff <- minErrorRow["xerror"] + minErrorRow["xstd"]
-best.cp <- cv.ct$cptable[cv.ct$cptable[,"xerror"] < cutoff,][1, "CP"]
+best.cp <- cv.rt$cptable[cv.rt$cptable[,"xerror"] < cutoff,][1, "CP"]
 
 best.rt <- prune(cv.rt, cp=best.cp)
 
