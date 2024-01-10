@@ -61,3 +61,5 @@ if (!require(DiscriMiner)) {
 }
 ```
 
+# Setting up an environment for deep learning applications
+In order to run the code for the deep learning applications, you will need to create a Python environment with the required packages. A convenient way to do this is to use [Anaconda](https://www.anaconda.com/products/individual). See [installPython.md](installPython.md) for instructions on how to install Anaconda and create the required environment.
